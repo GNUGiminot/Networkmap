@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NetworkMap — панель организации сетей</title>
+<style>
+  :root{
+    --bg:#0f1117; --panel:#171a23; --panel2:#1e2230; --border:#2a2f42;
+    --text:#e6e9f2; --muted:#8b93ab; --accent:#6c8cff; --accent2:#22c55e;
+    --danger:#ef4444; --warn:#f59e0b; --node:#1c2130; --node-border:#343b55;
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  html,body{height:100%; overflow:hidden}
+  body{background:var(--bg); color:var(--text); font:14px/1.45 "Segoe UI",system-ui,sans-serif; display:flex; flex-direction:column}
+
+  header{display:flex; align-items:center; gap:8px; padding:8px 14px; background:var(--panel); border-bottom:1px solid var(--border); z-index:20; flex-wrap:wrap}
+  header h1{font-size:15px; font-weight:600; margin-right:4px; white-space:nowrap}
+  header h1 span{color:var(--accent)}
+  .btn{background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 11px; cursor:pointer; font-size:13px; transition:.15s; white-space:nowrap}
+  .btn:hover{border-color:var(--accent); color:#fff}
+  .btn.active{background:var(--accent); border-color:var(--accent); color:#fff}
+  .btn.green.active{background:var(--accent2); border-color:var(--accent2)}
+  .sep{width:1px; height:24px; background:var(--border)}
+  .spacer{flex:1}
+  .hint{color:var(--muted); font-size:12px}
+  #saveDot{font-size:11px; color:var(--muted)}
+  #saveDot.saving{color:var(--warn)} #saveDot.err{color:var(--danger)}
+  #orgSel{background:var(--panel2); color:var(--text); border:1px solid var(--border); border-radius:8px; padding:6px 9px; font-size:13px; max-width:200px}
+  #orgSel:focus{outline:none; border-color:var(--accent)}
+  .menu{position:relative; display:inline-block}
+  .menu .drop{position:absolute; top:calc(100% + 4px); left:0; background:var(--panel2); border:1px solid var(--border); border-radius:9px; padding:5px; min-width:210px; box-shadow:0 12px 30px rgba(0,0,0,.5); z-index:40; display:none}
+  .menu.open .drop{display:block}
+  .menu .drop button{display:flex; align-items:center; gap:8px; width:100%; text-align:left; background:none; border:none; color:var(--text); padding:8px 9px; border-radius:6px; cursor:pointer; font-size:13px}
+  .menu .drop button:hover{background:var(--panel)}
+  .menu .drop hr{border:none; border-top:1px solid var(--border); margin:4px 2px}
+  .menu .drop small{display:block; color:var(--muted); font-size:11px; padding:2px 9px 6px}
+
+  main{flex:1; display:flex; min-height:0}
+  #palette{width:214px; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0}
+  #palHead{padding:10px 10px 6px}
+  #palSearch{width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:6px 10px; font-size:12.5px}
+  #palSearch:focus{outline:none; border-color:var(--accent)}
+  #palChips{display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px 4px}
+  .chip{font-size:10.5px; padding:3px 8px; border-radius:999px; border:1px solid var(--border); color:var(--muted); cursor:pointer; background:transparent; transition:.13s; white-space:nowrap}
+  .chip:hover{color:var(--text)}
+  .chip.on{color:#fff; border-color:transparent}
+  #palList{flex:1; overflow-y:auto; padding:4px 10px 10px}
+  #palList h3{font-size:10.5px; text-transform:uppercase; letter-spacing:.09em; color:var(--muted); margin:10px 0 6px; display:flex; align-items:center; gap:6px}
+  #palList h3::after{content:""; flex:1; height:1px; background:var(--border)}
+  .pal-item{display:flex; align-items:center; gap:9px; padding:6px 8px; border:1px solid var(--border); border-radius:10px; margin-bottom:5px; cursor:grab; background:var(--panel2); user-select:none; transition:.15s}
+  .pal-item:hover{border-color:var(--c,var(--accent)); transform:translateX(2px)}
+  .pal-item .ic{width:30px; height:30px; border-radius:8px; display:flex; align-items:center; justify-content:center; flex:none;
+    background:color-mix(in srgb, var(--c) 14%, transparent); border:1px solid color-mix(in srgb, var(--c) 38%, transparent)}
+  .pal-item .nm{font-size:12px; line-height:1.25}
+  #palAdd{margin:4px 10px 10px}
+  #palAdd .btn{width:100%; border-style:dashed; color:var(--muted)}
+  #palAdd .btn:hover{color:var(--text)}
+  #customForm{background:var(--panel2); border:1px solid var(--border); border-radius:10px; padding:9px; margin:0 10px 10px; display:none}
+  #customForm.open{display:block}
+  #customForm input,#customForm select{width:100%; background:var(--bg); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:5px 8px; font-size:12px; margin-bottom:6px}
+  #customForm .row{display:flex; gap:6px}
+  #customForm .row .btn{flex:1; padding:5px; font-size:12px}
+
+  #canvasWrap{flex:1; position:relative; overflow:hidden; background:
+     radial-gradient(circle at 1px 1px, #232840 1.1px, transparent 0) 0 0/26px 26px, var(--bg)}
+  svg#canvas{width:100%; height:100%; display:block; cursor:grab}
+  svg#canvas.panning{cursor:grabbing}
+  svg#canvas.connecting{cursor:crosshair}
+
+  #sidebar{width:310px; background:var(--panel); border-left:1px solid var(--border); display:flex; flex-direction:column; overflow:hidden}
+  #sidebar .tabs{display:flex; border-bottom:1px solid var(--border)}
+  #sidebar .tabs button{flex:1; background:none; border:none; color:var(--muted); padding:9px 0; cursor:pointer; font-size:13px; border-bottom:2px solid transparent}
+  #sidebar .tabs button.on{color:var(--text); border-bottom-color:var(--accent)}
+  #sidebar .tabs button .badge{background:var(--danger); color:#fff; border-radius:9px; font-size:10px; padding:1px 6px; margin-left:5px}
+  #sideContent{flex:1; overflow-y:auto; padding:14px}
+  .fld{margin-bottom:10px}
+  .fld label{display:block; font-size:11px; color:var(--muted); margin-bottom:4px; text-transform:uppercase; letter-spacing:.05em}
+  .fld input[type=text],.fld select,.fld textarea{width:100%; background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:7px 9px; font-size:13px; font-family:inherit}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{outline:none; border-color:var(--accent)}
+  .fld.two{display:flex; gap:8px} .fld.two>div{flex:1}
+  .chk{display:flex; align-items:center; gap:8px; font-size:13px; color:var(--text)}
+  details.sec{border:1px solid var(--border); border-radius:9px; margin-bottom:8px; overflow:hidden}
+  details.sec>summary{list-style:none; cursor:pointer; padding:9px 11px; font-size:12.5px; font-weight:600; background:var(--panel2); display:flex; align-items:center; gap:7px}
+  details.sec>summary::-webkit-details-marker{display:none}
+  details.sec>summary::before{content:"▸"; color:var(--muted); transition:.15s}
+  details.sec[open]>summary::before{transform:rotate(90deg)}
+  details.sec .body{padding:11px}
+  .devhead{display:flex; align-items:center; gap:10px; margin-bottom:12px}
+  .devhead .ic{width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center; flex:none;
+    background:color-mix(in srgb, var(--c) 14%, transparent); border:1px solid color-mix(in srgb, var(--c) 40%, transparent)}
+  .devhead b{font-size:14.5px}
+  .devhead small{display:block; color:var(--muted); font-size:11.5px}
+  .cfg-item,.usr-row{display:flex; align-items:center; gap:8px; background:var(--panel2); border:1px solid var(--border); border-radius:7px; padding:6px 9px; margin-bottom:6px; font-size:12.5px}
+  .cfg-item a{color:var(--accent); text-decoration:none}
+  .cfg-item a:hover{text-decoration:underline}
+  .cfg-item .dt{color:var(--muted); font-size:11px}
+  .cfg-item button,.usr-row .rm{margin-left:auto; background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px}
+  .cfg-item button:hover,.usr-row .rm:hover{color:var(--danger)}
+  .tagi{font-size:10px; padding:1px 6px; border-radius:5px; border:1px solid var(--border); color:var(--muted)}
+  .tagi.net{color:#7dd3fc; border-color:#38bdf855}
+  .tagi.no{color:#fca5a5; border-color:#ef444455}
+  .issue{border-left:3px solid var(--warn); background:var(--panel2); border-radius:0 7px 7px 0; padding:8px 10px; margin-bottom:8px; font-size:12.5px; cursor:pointer}
+  .issue.error{border-left-color:var(--danger)}
+  .issue .t{font-weight:600; margin-bottom:2px}
+  .issue .d{color:var(--muted)}
+  .empty{color:var(--muted); font-size:13px; text-align:center; margin-top:40px}
+  .ok{color:var(--accent2); text-align:center; margin-top:40px; font-size:13px}
+  .mini-ping{display:flex; align-items:flex-end; gap:2px; height:38px; margin-top:6px}
+  .mini-ping i{flex:1; background:var(--accent); border-radius:2px 2px 0 0; min-height:2px; opacity:.85}
+  .mini-ping i.dead{background:var(--danger)}
+  .statline{display:flex; justify-content:space-between; font-size:12px; color:var(--muted); margin-top:4px}
+  .del-btn{width:100%; margin-top:6px; background:transparent; border:1px solid var(--danger); color:var(--danger); border-radius:7px; padding:7px; cursor:pointer}
+  .del-btn:hover{background:var(--danger); color:#fff}
+  .prn-btn{width:100%; margin-top:8px; background:transparent; border:1px solid var(--accent); color:var(--accent); border-radius:7px; padding:7px; cursor:pointer}
+  .prn-btn:hover{background:var(--accent); color:#fff}
+
+  .node{cursor:move}
+  .node rect.card{fill:var(--node); stroke:var(--node-border); stroke-width:1.4}
+  .node.selected rect.card{stroke:var(--accent); stroke-width:2; filter:drop-shadow(0 0 7px rgba(108,140,255,.55))}
+  .node.offline rect.card{stroke:var(--danger); filter:drop-shadow(0 0 8px rgba(239,68,68,.45))}
+  .node text{user-select:none; pointer-events:none}
+  .node .nm{fill:var(--text); font-size:12.5px; font-weight:600}
+  .node .ip{fill:var(--muted); font-size:10.5px}
+  .node circle.status{stroke:var(--node); stroke-width:2}
+  .node .devicon{pointer-events:none}
+  .link{stroke:#4c5878; stroke-width:2.2; fill:none; cursor:pointer}
+  .link:hover{stroke:var(--accent)}
+  .link.selected{stroke:var(--accent) !important; stroke-width:3}
+  .link.t-fiber{stroke:#d9a441; stroke-width:3}
+  .link.t-wifi{stroke:#38bdf8; stroke-dasharray:2 5; stroke-width:2}
+  .link.t-vpn{stroke:#a78bfa; stroke-dasharray:10 6; stroke-width:2.2}
+  .link.dead{stroke:var(--danger) !important; stroke-dasharray:6 5; animation:dash 1s linear infinite}
+  @keyframes dash{to{stroke-dashoffset:-11}}
+  .seg rect{stroke-width:1.6; stroke-dasharray:8 6; fill-opacity:.07}
+  .seg.restricted rect{stroke-dasharray:3 4}
+  .seg.selected rect{stroke-width:2.6; stroke-dasharray:none}
+  .seg text{font-size:13px; font-weight:600; user-select:none; cursor:move}
+  .seg .cidr{font-size:11px; font-weight:400; opacity:.75}
+  .seg .grip{cursor:nwse-resize; fill:transparent}
+  #tempLink{stroke:var(--accent); stroke-width:2; stroke-dasharray:5 4; fill:none; pointer-events:none}
+
+  #toasts{position:absolute; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index:30; max-width:340px}
+  .toast{background:var(--panel2); border:1px solid var(--border); border-left:4px solid var(--accent); border-radius:9px; padding:10px 14px; font-size:13px; box-shadow:0 8px 24px rgba(0,0,0,.45); animation:pop .2s ease}
+  .toast.warn{border-left-color:var(--warn)} .toast.error{border-left-color:var(--danger)} .toast.ok{border-left-color:var(--accent2)}
+  .toast .tt{font-weight:600; margin-bottom:2px}
+  .toast .td{color:var(--muted); font-size:12px}
+  @keyframes pop{from{transform:translateY(8px); opacity:0}}
+  @media (prefers-reduced-motion: reduce){ .toast{animation:none} .link.dead{animation:none} }
+
+  #zoomInfo{position:absolute; left:12px; bottom:12px; color:var(--muted); font-size:12px; background:var(--panel); border:1px solid var(--border); border-radius:7px; padding:4px 10px}
+  #legend{position:absolute; left:12px; top:12px; background:var(--panel); border:1px solid var(--border); border-radius:9px; padding:7px 12px; font-size:11px; color:var(--muted); display:flex; gap:14px}
+  #legend i{display:inline-block; width:22px; height:0; border-top:2.4px solid #4c5878; vertical-align:middle; margin-right:5px}
+  #legend .lf i{border-top-color:#d9a441; border-top-width:3px}
+  #legend .lw i{border-top-style:dotted; border-top-color:#38bdf8}
+  #legend .lv i{border-top-style:dashed; border-top-color:#a78bfa}
+
+  #overlay{position:fixed; inset:0; background:rgba(6,8,14,.66); z-index:60; display:none; align-items:center; justify-content:center}
+  #overlay.open{display:flex}
+  .modal{background:var(--panel); border:1px solid var(--border); border-radius:14px; width:min(680px,94vw); max-height:88vh; display:flex; flex-direction:column; overflow:hidden}
+  .modal .mh{display:flex; align-items:center; padding:14px 18px; border-bottom:1px solid var(--border)}
+  .modal .mh b{font-size:15px} .modal .mh .x{margin-left:auto; cursor:pointer; color:var(--muted); font-size:20px; background:none; border:none}
+  .modal .mb{padding:16px 18px; overflow-y:auto}
+  table.u{width:100%; border-collapse:collapse; font-size:13px}
+  table.u th{text-align:left; color:var(--muted); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.05em; padding:6px 8px; border-bottom:1px solid var(--border)}
+  table.u td{padding:5px 8px; border-bottom:1px solid var(--border)}
+  table.u input,table.u select{background:var(--panel2); border:1px solid var(--border); color:var(--text); border-radius:6px; padding:5px 7px; font-size:12.5px; width:100%}
+  table.u input:focus,table.u select:focus{outline:none; border-color:var(--accent)}
+  table.u .rm{background:none;border:none;color:var(--muted);cursor:pointer;font-size:15px}
+  table.u .rm:hover{color:var(--danger)}
+
+  /* ---------- серверные стойки ---------- */
+  #rackOverlay{position:fixed; inset:0; background:var(--bg); z-index:55; display:none; flex-direction:column}
+  #rackOverlay.open{display:flex}
+  #rackHead{display:flex; align-items:center; gap:10px; padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--border)}
+  #rackHead b{font-size:15px}
+  #rackHead .x{margin-left:auto}
+  #rackMain{flex:1; display:flex; min-height:0}
+  #rackList{width:210px; background:var(--panel); border-right:1px solid var(--border); padding:12px; overflow-y:auto}
+  #rackList h3{font-size:10.5px; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); margin-bottom:8px}
+  .rack-tab{display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--border); border-radius:9px; margin-bottom:6px; cursor:pointer; background:var(--panel2); font-size:13px; transition:.13s}
+  .rack-tab:hover{border-color:var(--accent)}
+  .rack-tab.on{border-color:var(--accent); background:color-mix(in srgb, var(--accent) 14%, var(--panel2))}
+  .rack-tab small{color:var(--muted); margin-left:auto; font-size:11px}
+  #rackStage{flex:1; overflow:auto; display:flex; align-items:flex-start; justify-content:center; padding:26px}
+  #rackSide{width:300px; background:var(--panel); border-left:1px solid var(--border); padding:14px; overflow-y:auto}
+
+  .rackbox{background:linear-gradient(180deg,#232838,#1a1e2b); border:2px solid #3a415c; border-radius:12px; padding:14px 10px; box-shadow:0 18px 50px rgba(0,0,0,.5)}
+  .rackbox .rname{text-align:center; font-weight:600; font-size:13px; margin-bottom:10px; color:var(--text)}
+  .rackframe{position:relative; display:flex; border:2px solid #454d6e; border-radius:6px; background:#12141d}
+  .rail{width:26px; background:repeating-linear-gradient(180deg,#262b3d 0,#262b3d var(--uh),#20253502 var(--uh)); display:flex; flex-direction:column-reverse}
+  .rail span{height:var(--uh); display:flex; align-items:center; justify-content:center; font-size:8.5px; color:#5c6584; user-select:none;
+    background-image:radial-gradient(circle 1.6px, #0c0e14 55%, transparent 60%); background-size:100% calc(var(--uh)/2); background-position:center}
+  .uwell{position:relative; width:308px; background:repeating-linear-gradient(180deg, transparent 0, transparent calc(var(--uh) - 1px), #262b3d calc(var(--uh) - 1px), #262b3d var(--uh))}
+  .runit{position:absolute; left:3px; right:3px; border-radius:5px; border:1px solid color-mix(in srgb, var(--c) 55%, #000); cursor:grab; overflow:hidden;
+    background:linear-gradient(180deg, color-mix(in srgb, var(--c) 26%, #171a26), color-mix(in srgb, var(--c) 12%, #12141d));
+    display:flex; align-items:center; gap:8px; padding:0 8px; user-select:none; transition:box-shadow .12s}
+  .runit:hover{box-shadow:0 0 0 1.5px var(--c)}
+  .runit.sel{box-shadow:0 0 0 2px var(--accent), 0 0 12px rgba(108,140,255,.4)}
+  .runit.dead{border-color:var(--danger); box-shadow:0 0 0 1.5px var(--danger)}
+  .runit .ric{flex:none; display:flex}
+  .runit .rtx{min-width:0; line-height:1.15}
+  .runit .rtx b{display:block; font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .runit .rtx i{font-style:normal; font-size:9.5px; color:var(--muted)}
+  .runit .rsz{margin-left:auto; font-size:9px; color:var(--muted); flex:none}
+  .runit .led{width:7px; height:7px; border-radius:50%; flex:none}
+  .rackempty{color:var(--muted); font-size:13px; text-align:center; padding:60px 20px}
+
+  #printRoot{display:none}
+  @media print{
+    @page{size:A4; margin:14mm}
+    body{overflow:visible}
+    body>*{display:none !important}
+    #printRoot{display:block !important; position:static; color:#111; font:12px/1.5 "Segoe UI",Arial,sans-serif}
+    #printRoot h1{font-size:20px; margin-bottom:2px}
+    #printRoot .sub{color:#555; font-size:12px; margin-bottom:14px}
+    #printRoot h2{font-size:14px; margin:18px 0 8px; border-bottom:2px solid #333; padding-bottom:3px}
+    #printRoot table{width:100%; border-collapse:collapse; margin-bottom:10px; font-size:10.5px}
+    #printRoot th,#printRoot td{border:1px solid #bbb; padding:4px 6px; text-align:left; vertical-align:top}
+    #printRoot th{background:#eef; font-size:9.5px; text-transform:uppercase; letter-spacing:.03em}
+    #printRoot tr{break-inside:avoid}
+    #printRoot .kv{display:grid; grid-template-columns:150px 1fr; gap:2px 12px; font-size:12px; margin-bottom:12px}
+    #printRoot .kv b{color:#333} #printRoot .kv span{color:#111}
+    #printRoot .foot{margin-top:16px; font-size:10px; color:#777; border-top:1px solid #ccc; padding-top:6px}
+    #printRoot .diagram{border:1px solid #ccc; border-radius:6px; padding:6px; margin-bottom:8px}
+    #printRoot .node rect.card{fill:#fff; stroke:#666}
+    #printRoot .node .nm{fill:#111} #printRoot .node .ip{fill:#555}
+    #printRoot .seg text{fill:#333} #printRoot .link{stroke:#888}
+    #printRoot .pill{display:inline-block;border:1px solid #999;border-radius:4px;padding:0 5px;font-size:9.5px}
+    #printRoot .prack{width:300px; border:2px solid #444; border-radius:6px; display:flex; background:#fff; margin:0 auto 14px}
+    #printRoot .prack .rail{width:22px; background:none; display:flex; flex-direction:column-reverse; border-right:1px solid #ccc}
+    #printRoot .prack .rail:last-child{border-right:none; border-left:1px solid #ccc}
+    #printRoot .prack .rail span{height:var(--uh); display:flex; align-items:center; justify-content:center; font-size:7.5px; color:#888; background:none}
+    #printRoot .prack .uwell{flex:1; position:relative; background:repeating-linear-gradient(180deg, transparent 0, transparent calc(var(--uh) - 1px), #ddd calc(var(--uh) - 1px), #ddd var(--uh)); width:auto}
+    #printRoot .prack .runit{position:absolute; left:2px; right:2px; border:1.5px solid #555; border-radius:4px; background:#f4f6fa; display:flex; align-items:center; gap:6px; padding:0 6px; overflow:hidden}
+    #printRoot .prack .runit b{font-size:9.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+    #printRoot .prack .runit i{font-style:normal; font-size:8px; color:#555}
+    #printRoot .prack .runit .rsz{margin-left:auto; font-size:8px; color:#666}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🕸 Network<span>Map</span></h1>
+  <select id="orgSel" title="Организация"></select>
+  <button class="btn" id="btnOrgAdd" title="Добавить организацию">＋ Орг.</button>
+  <div class="sep"></div>
+  <button class="btn" id="btnConnect" title="Клик по первому устройству, затем по второму">🔗 Соединить</button>
+  <button class="btn" id="btnSegment" title="Нарисуйте рамку сети/сегмента мышью">▧ Сеть / сегмент</button>
+  <button class="btn" id="btnUsers" title="Справочник пользователей организации">👥 Пользователи</button>
+  <button class="btn" id="btnRacks" title="Серверные стойки организации">🗄 Стойки</button>
+  <div class="sep"></div>
+  <button class="btn green active" id="btnMonitor" title="Показывать живые статусы ping с сервера">📡 Мониторинг: вкл</button>
+  <div class="sep"></div>
+  <div class="menu" id="printMenu">
+    <button class="btn" id="btnPrint">🖨 Печать ▾</button>
+    <div class="drop">
+      <small>Отчёты по текущей организации</small>
+      <button data-p="schema">🗺 Схема сети (A4)</button>
+      <button data-p="inv">📋 Инвентаризация устройств</button>
+      <button data-p="access">🔐 Доступы и пользователи</button>
+      <hr>
+      <button data-p="export">⬇ Экспорт в JSON</button>
+      <button data-p="import">⬆ Импорт из JSON</button>
+    </div>
+  </div>
+  <input type="file" id="fileImport" accept=".json" hidden>
+  <div class="spacer"></div>
+  <span id="saveDot">●</span>
+  <span class="hint">Колесо — зум • Delete — удалить</span>
+</header>
+
+<main>
+  <aside id="palette">
+    <div id="palHead"><input type="text" id="palSearch" placeholder="Поиск устройства…"></div>
+    <div id="palChips"></div>
+    <div id="palList"></div>
+    <div id="palAdd"><button class="btn" id="btnCustom">＋ Свой тип устройства</button></div>
+    <div id="customForm">
+      <input type="text" id="cf_name" placeholder="Название (например, СКУД)">
+      <select id="cf_cat"></select>
+      <input type="color" id="cf_color" value="#e2b714" style="height:30px;padding:2px;cursor:pointer">
+      <div class="row"><button class="btn" id="cf_ok">Создать</button><button class="btn" id="cf_cancel">Отмена</button></div>
+    </div>
+  </aside>
+
+  <div id="canvasWrap">
+    <svg id="canvas"><g id="viewport">
+      <g id="gSegments"></g>
+      <g id="gLinks"></g>
+      <path id="tempLink" d="" visibility="hidden"/>
+      <g id="gNodes"></g>
+      <rect id="segDraft" fill="rgba(108,140,255,.12)" stroke="var(--accent)" stroke-dasharray="6 5" rx="14" visibility="hidden"/>
+    </g></svg>
+    <div id="legend">
+      <span class="le"><i></i>медь</span><span class="lf"><i></i>оптика</span>
+      <span class="lw"><i></i>Wi-Fi</span><span class="lv"><i></i>VPN</span>
+    </div>
+    <div id="zoomInfo">100%</div>
+    <div id="toasts"></div>
+  </div>
+
+  <aside id="sidebar">
+    <div class="tabs">
+      <button id="tabProps" class="on">Свойства</button>
+      <button id="tabIssues">Проблемы<span class="badge" id="issueBadge" style="display:none">0</span></button>
+    </div>
+    <div id="sideContent"></div>
+  </aside>
+</main>
+
+<div id="overlay"><div class="modal">
+  <div class="mh"><b>👥 Пользователи организации</b><button class="x" id="usrClose">✕</button></div>
+  <div class="mb" id="usrBody"></div>
+</div></div>
+
+<div id="rackOverlay">
+  <div id="rackHead">
+    <b>🗄 Серверные стойки</b>
+    <button class="btn" id="rackAdd">＋ Стойка</button>
+    <button class="btn" id="unitAdd">＋ Юнит</button>
+    <button class="btn" id="rackPrint">🖨 Печать схемы стойки</button>
+    <button class="btn x" id="rackClose">✕ Закрыть</button>
+  </div>
+  <div id="rackMain">
+    <aside id="rackList"></aside>
+    <div id="rackStage"></div>
+    <aside id="rackSide"></aside>
+  </div>
+</div>
+
+<div id="printRoot"></div>
+
+<script>
+"use strict";
+/* ==========================================================================
+   NetworkMap — клиент. Данные хранятся на сервере (SQLite через REST API),
+   статусы устройств приходят по WebSocket от реального ping-мониторинга.
+   ========================================================================== */
+
+const API = "";  // тот же хост
+
+/* ---------- категории ---------- */
+const CATS = {
+  net:{name:"Сетевое оборудование",color:"#6c8cff"}, sec:{name:"Безопасность",color:"#f97316"},
+  end:{name:"Рабочие места",color:"#38bdf8"}, srv:{name:"Серверы",color:"#22c55e"},
+  sto:{name:"Хранение данных",color:"#14b8a6"}, app:{name:"Сервисы и ПО",color:"#a78bfa"},
+  per:{name:"Периферия",color:"#ec4899"}, misc:{name:"Инфраструктура",color:"#94a3b8"},
+};
+/* ---------- иконки (контурные 24×24) ---------- */
+const ICONS = {
+  router:`<rect x="3" y="12.5" width="18" height="7.5" rx="2"/><path d="M7 12.5 5.2 5.5M17 12.5l1.8-7"/><circle cx="5.2" cy="4.6" r="1"/><circle cx="18.8" cy="4.6" r="1"/><circle cx="7" cy="16.2" r=".4" fill="currentColor"/><circle cx="10" cy="16.2" r=".4" fill="currentColor"/><path d="M14 16.2h4"/>`,
+  switch:`<rect x="3" y="8" width="18" height="8" rx="2"/><path d="M7.5 10.6h6m0 0-1.7-1.7M13.5 10.6l-1.7 1.7"/><path d="M16.5 13.6h-6m0 0 1.7-1.7M10.5 13.6l1.7 1.7"/>`,
+  ap:`<path d="M4.5 10.2a10.6 10.6 0 0 1 15 0"/><path d="M7.5 13.3a6.4 6.4 0 0 1 9 0"/><circle cx="12" cy="17.3" r="1.7"/><path d="M12 19v1.5"/>`,
+  modem:`<rect x="8.5" y="3" width="7" height="18" rx="2"/><circle cx="12" cy="17.5" r="1"/><path d="M10.5 6.5h3M10.5 9.5h3"/>`,
+  firewall:`<path d="M12 3l7.5 2.8v5.1c0 4.6-3.2 7.7-7.5 9.6-4.3-1.9-7.5-5-7.5-9.6V5.8Z"/><path d="M4.8 9.5h14.4M8.3 6.2v3.3M12 9.5v4.3M15.7 6.4v3.1M8.3 13.8v3M15.7 13.8v3M4.9 13.8h14.2"/>`,
+  vpn:`<rect x="5" y="10.5" width="14" height="9" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/><circle cx="12" cy="14.5" r="1.3"/><path d="M12 15.8v1.7"/>`,
+  camera:`<rect x="2.5" y="6.5" width="13" height="8" rx="2.5"/><circle cx="9" cy="10.5" r="2"/><path d="M15.5 9l6-2.5v7L15.5 12"/><path d="M6.5 14.5v4h5"/>`,
+  arm:`<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v3M8 20.5h8"/><path d="M6.5 8.5l3 2.5-3 2.5"/><path d="M11.5 13.5h4"/>`,
+  laptop:`<rect x="5" y="4.5" width="14" height="9.5" rx="1.5"/><path d="M3 18.5h18l-2.2-3.5H5.2Z"/>`,
+  printer:`<rect x="4" y="9" width="16" height="7" rx="2"/><path d="M7.5 9V4.5h9V9"/><rect x="7.5" y="13.5" width="9" height="6.5" rx="1"/><circle cx="17" cy="11.5" r=".6" fill="currentColor"/>`,
+  phone:`<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 5.5h3"/><rect x="9" y="8" width="6" height="4" rx="1"/><path d="M9.5 15h.01M12 15h.01M14.5 15h.01M9.5 18h.01M12 18h.01M14.5 18h.01"/>`,
+  server:`<rect x="4" y="3.5" width="16" height="7" rx="1.6"/><rect x="4" y="13.5" width="16" height="7" rx="1.6"/><circle cx="7.5" cy="7" r=".7" fill="currentColor"/><circle cx="7.5" cy="17" r=".7" fill="currentColor"/><path d="M12 7h5M12 17h5"/>`,
+  vm:`<rect x="3" y="3" width="8.5" height="8.5" rx="1.6"/><rect x="12.5" y="3" width="8.5" height="8.5" rx="1.6"/><rect x="3" y="12.5" width="8.5" height="8.5" rx="1.6"/><rect x="12.5" y="12.5" width="8.5" height="8.5" rx="1.6"/>`,
+  nas:`<rect x="4.5" y="3" width="15" height="18" rx="2"/><path d="M4.5 8h15M4.5 13h15"/><circle cx="8" cy="5.5" r=".6" fill="currentColor"/><circle cx="8" cy="10.5" r=".6" fill="currentColor"/><circle cx="8" cy="16.8" r=".6" fill="currentColor"/><path d="M11.5 16.8h5"/>`,
+  db:`<ellipse cx="12" cy="5.5" rx="7.5" ry="2.7"/><path d="M4.5 5.5v13c0 1.5 3.4 2.7 7.5 2.7s7.5-1.2 7.5-2.7v-13"/><path d="M4.5 12c0 1.5 3.4 2.7 7.5 2.7s7.5-1.2 7.5-2.7"/>`,
+  crm:`<rect x="3" y="3.5" width="18" height="17" rx="2"/><path d="M3 7.5h18"/><circle cx="5.3" cy="5.5" r=".55" fill="currentColor"/><circle cx="7.3" cy="5.5" r=".55" fill="currentColor"/><circle cx="8" cy="12" r="1.8"/><path d="M4.8 17.5c.5-1.7 1.7-2.6 3.2-2.6s2.7.9 3.2 2.6"/><path d="M13.5 11.5H19M13.5 14.5h5.5M13.5 17.5h4"/>`,
+  mail:`<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3.5 6.5 8.5 6.5 8.5-6.5"/>`,
+  web:`<circle cx="12" cy="12" r="8.6"/><path d="M3.4 12h17.2M12 3.4c-2.6 2.4-3.9 5.3-3.9 8.6s1.3 6.2 3.9 8.6c2.6-2.4 3.9-5.3 3.9-8.6s-1.3-6.2-3.9-8.6Z"/>`,
+  internet:`<path d="M7 18.5a4.3 4.3 0 0 1-.4-8.6 5.9 5.9 0 0 1 11.4-1.4 4.5 4.5 0 0 1-.6 9.9Z"/>`,
+  ups:`<rect x="3" y="8" width="15.5" height="8.5" rx="2"/><path d="M18.5 10.7h2v3.1h-2"/><path d="m11.3 9.4-2.5 3.1h2.2l-1.3 2.6 2.7-3.1h-2.1Z"/>`,
+  custom:`<path d="m12 3 7.8 4.5v9L12 21l-7.8-4.5v-9Z"/><path d="M12 12 4.4 7.6M12 12l7.6-4.4M12 12v8.8"/>`,
+};
+function iconSvg(t,size,color){
+  const def=TYPES[t]||{ico:"custom"};
+  const body=ICONS[def.ico]||ICONS.custom;
+  return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" stroke="${color}" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">${body}</svg>`;
+}
+const BUILTIN_TYPES = {
+  router:{name:"Маршрутизатор",ico:"router",cat:"net"}, switch:{name:"Коммутатор",ico:"switch",cat:"net"},
+  ap:{name:"Точка доступа",ico:"ap",cat:"net"}, modem:{name:"Модем / ONT",ico:"modem",cat:"net"},
+  firewall:{name:"Межсетевой экран",ico:"firewall",cat:"sec"}, vpn:{name:"VPN-шлюз",ico:"vpn",cat:"sec"},
+  camera:{name:"IP-камера",ico:"camera",cat:"sec"}, arm:{name:"АРМ",ico:"arm",cat:"end"},
+  laptop:{name:"Ноутбук",ico:"laptop",cat:"end"}, phone:{name:"IP-телефон",ico:"phone",cat:"end"},
+  server:{name:"Сервер",ico:"server",cat:"srv"}, vm:{name:"Гипервизор / ВМ",ico:"vm",cat:"srv"},
+  nas:{name:"NAS-хранилище",ico:"nas",cat:"sto"}, db:{name:"СУБД",ico:"db",cat:"sto"},
+  crm:{name:"CRM-система",ico:"crm",cat:"app"}, mail:{name:"Почтовый сервер",ico:"mail",cat:"app"},
+  web:{name:"Веб-сервис",ico:"web",cat:"app"}, printer:{name:"МФУ / принтер",ico:"printer",cat:"per"},
+  ups:{name:"ИБП",ico:"ups",cat:"misc"}, internet:{name:"Интернет / WAN",ico:"internet",cat:"misc"},
+};
+let TYPES={...BUILTIN_TYPES};
+const typeColor=t=>{const d=TYPES[t]; if(!d) return "#94a3b8"; return d.color||CATS[d.cat].color;};
+const typeName=t=>TYPES[t]?TYPES[t].name:"Устройство";
+const LINK_TYPES={copper:"Медь (Ethernet)",fiber:"Оптика",wifi:"Wi-Fi",vpn:"VPN-туннель"};
+const STATUSES={active:"В эксплуатации",reserve:"В резерве",repair:"В ремонте",decom:"Списано"};
+const ACCESS={all:"Открыт всем",users:"Сотрудникам отдела",admins:"Только администраторы",restricted:"Ограниченный доступ"};
+
+const NODE_W=150, NODE_H=76, ICON_BOX=38;
+const SEG_COLORS=["#6c8cff","#22c55e","#f59e0b","#ec4899","#14b8a6","#a78bfa"];
+
+let state={orgs:[],curOrg:null,customTypes:{},seq:1};
+let view={x:0,y:0,k:1};
+let mode="idle", connectFrom=null, selection=null;
+let showMonitor=true, statusMap={}, histMap={};
+let palFilter={cat:"all", q:""}, curTab="props";
+let ws=null;
+
+const $=s=>document.querySelector(s);
+const svg=$("#canvas"), vp=$("#viewport"), gSeg=$("#gSegments"), gLnk=$("#gLinks"), gNod=$("#gNodes");
+const uid=()=> "n"+(state.seq++)+"_"+Math.random().toString(36).slice(2,6);
+const org=()=> state.orgs.find(o=>o.id===state.curOrg) || state.orgs[0];
+const D=()=>org().devices, LK=()=>org().links, SG=()=>org().segments, US=()=>org().users;
+
+/* ================= сохранение на сервер (debounce) ================= */
+let saveTimer=null;
+function save(){
+  $("#saveDot").className="saving"; $("#saveDot").title="Сохранение…";
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(async ()=>{
+    try{
+      const r=await fetch(API+"/api/state",{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(state)});
+      if(!r.ok) throw new Error(r.status);
+      $("#saveDot").className=""; $("#saveDot").title="Сохранено";
+    }catch(e){
+      $("#saveDot").className="err"; $("#saveDot").title="Ошибка сохранения!";
+      toast("error","Не удалось сохранить","Проверьте, запущен ли сервер");
+    }
+  },600);
+}
+
+/* ================= WebSocket мониторинга ================= */
+function connectWS(){
+  const proto=location.protocol==="https:"?"wss":"ws";
+  ws=new WebSocket(`${proto}://${location.host}/ws`);
+  ws.onmessage=e=>{
+    try{
+      const msg=JSON.parse(e.data);
+      if(msg.type==="status"){
+        const prev=statusMap; statusMap=msg.data||{};
+        for(const [id,st] of Object.entries(statusMap)){
+          const h=histMap[id]=histMap[id]||[];
+          h.push(st.online?(st.rtt??1):-1); if(h.length>60) h.shift();
+          const was=prev[id];
+          const dev=D().find(d=>d.id===id);
+          if(dev&&was&&was.online&&!st.online) toast("error","Устройство недоступно",`${dev.name} не отвечает на ping`);
+          if(dev&&was&&!was.online&&st.online) toast("ok","Устройство снова в сети",`${dev.name}${st.rtt?" ("+st.rtt+" мс)":""}`);
+        }
+        if(showMonitor){ renderAll(); if(selection&&selection.kind==="device") renderSide(); }
+      }
+    }catch(err){}
+  };
+  ws.onclose=()=>setTimeout(connectWS,3000);
+  ws.onopen=()=>{ setInterval(()=>{ if(ws.readyState===1) ws.send("ping"); },25000); };
+}
+
+/* ================= палитра ================= */
+function renderChips(){
+  const box=$("#palChips"); box.innerHTML="";
+  const mk=(id,label,color)=>{
+    const b=document.createElement("button");
+    b.className="chip"+(palFilter.cat===id?" on":"");
+    if(palFilter.cat===id) b.style.background=color||"var(--accent)";
+    b.textContent=label; b.onclick=()=>{palFilter.cat=id; renderChips(); renderPalette();};
+    box.appendChild(b);
+  };
+  mk("all","Все");
+  for(const [id,c] of Object.entries(CATS)) mk(id,c.name.split(" ")[0],c.color);
+}
+function renderPalette(){
+  const list=$("#palList"); list.innerHTML="";
+  const q=palFilter.q.toLowerCase(); const byCat={};
+  for(const [t,d] of Object.entries(TYPES)){
+    if(palFilter.cat!=="all"&&d.cat!==palFilter.cat) continue;
+    if(q&&!d.name.toLowerCase().includes(q)) continue;
+    (byCat[d.cat]=byCat[d.cat]||[]).push([t,d]);
+  }
+  for(const [cat,items] of Object.entries(byCat)){
+    const h=document.createElement("h3"); h.textContent=CATS[cat].name; list.appendChild(h);
+    for(const [t,d] of items){
+      const c=typeColor(t);
+      const el=document.createElement("div");
+      el.className="pal-item"; el.draggable=true; el.style.setProperty("--c",c);
+      el.innerHTML=`<span class="ic">${iconSvg(t,18,c)}</span><span class="nm">${esc(d.name)}</span>`;
+      el.addEventListener("dragstart",e=>e.dataTransfer.setData("type",t));
+      list.appendChild(el);
+    }
+  }
+  if(!list.children.length) list.innerHTML=`<div class="empty" style="margin-top:20px">Ничего не найдено</div>`;
+}
+$("#palSearch").addEventListener("input",e=>{palFilter.q=e.target.value; renderPalette();});
+$("#btnCustom").onclick=()=>$("#customForm").classList.toggle("open");
+$("#cf_cancel").onclick=()=>$("#customForm").classList.remove("open");
+{ const sel=$("#cf_cat"); for(const [id,c] of Object.entries(CATS)) sel.insertAdjacentHTML("beforeend",`<option value="${id}">${c.name}</option>`); }
+$("#cf_ok").onclick=()=>{
+  const name=$("#cf_name").value.trim();
+  if(!name) return toast("warn","Укажите название","Например: СКУД, IP-домофон, терминал сбора данных");
+  const key="custom_"+Date.now();
+  const def={name,ico:"custom",cat:$("#cf_cat").value,color:$("#cf_color").value,custom:true};
+  TYPES[key]=def; state.customTypes[key]=def;
+  $("#cf_name").value=""; $("#customForm").classList.remove("open");
+  renderPalette(); save(); toast("ok","Тип добавлен",`«${name}» появился в палитре`);
+};
+
+svg.addEventListener("dragover",e=>e.preventDefault());
+svg.addEventListener("drop",e=>{ e.preventDefault();
+  const t=e.dataTransfer.getData("type"); if(!t||!TYPES[t]) return;
+  const p=toWorld(e.clientX,e.clientY); addDevice(t,p.x-NODE_W/2,p.y-NODE_H/2);
+});
+
+/* ================= организации ================= */
+function renderOrgs(){
+  const sel=$("#orgSel"); sel.innerHTML="";
+  for(const o of state.orgs) sel.insertAdjacentHTML("beforeend",`<option value="${o.id}" ${o.id===state.curOrg?"selected":""}>${esc(o.name)}</option>`);
+}
+$("#orgSel").addEventListener("change",e=>{ state.curOrg=e.target.value; switchedOrg(); save(); });
+$("#btnOrgAdd").onclick=()=>{
+  const name=prompt("Название новой организации:"); if(!name) return;
+  const o={id:uid(),name:name.trim(),devices:[],links:[],segments:[],users:[],racks:[]};
+  state.orgs.push(o); state.curOrg=o.id; renderOrgs(); switchedOrg(); save();
+  toast("ok","Организация создана",name);
+};
+function switchedOrg(){ selection=null; renderOrgs(); renderAll(); renderSide(); validate(); }
+
+/* ================= координаты / зум / пан ================= */
+function toWorld(cx,cy){ const r=svg.getBoundingClientRect(); return {x:(cx-r.left-view.x)/view.k, y:(cy-r.top-view.y)/view.k}; }
+function applyView(){ vp.setAttribute("transform",`translate(${view.x},${view.y}) scale(${view.k})`); $("#zoomInfo").textContent=Math.round(view.k*100)+"%"; }
+svg.addEventListener("wheel",e=>{ e.preventDefault();
+  const p=toWorld(e.clientX,e.clientY);
+  view.k=Math.min(2.5,Math.max(.25, view.k*(e.deltaY<0?1.12:0.89)));
+  const r=svg.getBoundingClientRect(); view.x=e.clientX-r.left-p.x*view.k; view.y=e.clientY-r.top-p.y*view.k; applyView();
+},{passive:false});
+
+/* ================= модель ================= */
+function newDevice(type,x,y){
+  const n=D().filter(d=>d.type===type).length+1;
+  return {id:uid(),type,x,y,name:typeName(type)+" "+n,
+    ip:"",mask:"24",gateway:"",dns:"",mac:"",vlan:"",dhcp:false,
+    vendor:"",model:"",serial:"",inv:"",location:"",os:"",ports:"",
+    status:"active",responsible:"",accessLevel:"all",accessNote:"",
+    userIds:[],notes:"",configs:[],monitored:type!=="internet"};
+}
+function addDevice(type,x,y){ const d=newDevice(type,x,y); D().push(d); select("device",d.id); renderAll(); validate(); save(); return d; }
+function addLink(a,b){
+  if(a===b) return;
+  if(LK().some(l=>(l.from===a&&l.to===b)||(l.from===b&&l.to===a))) return toast("warn","Связь уже существует","");
+  LK().push({id:uid(),from:a,to:b,label:"",ltype:"copper"}); renderAll(); validate(); save();
+}
+function addSegment(x,y,w,h){
+  const seg={id:uid(),name:"Сеть "+(SG().length+1),cidr:"",vlan:"",accessLevel:"all",accessNote:"",
+             color:SEG_COLORS[SG().length%SEG_COLORS.length],x,y,w,h};
+  SG().push(seg); select("segment",seg.id); renderAll(); validate(); save();
+}
+function deleteSelected(){
+  if(!selection) return; const {kind,id}=selection;
+  if(kind==="device"){ org().devices=D().filter(d=>d.id!==id); org().links=LK().filter(l=>l.from!==id&&l.to!==id); }
+  else if(kind==="link"){ org().links=LK().filter(l=>l.id!==id); }
+  else if(kind==="segment"){ org().segments=SG().filter(s=>s.id!==id); }
+  selection=null; renderAll(); renderSide(); validate(); save();
+}
+document.addEventListener("keydown",e=>{
+  if(e.key==="Delete" && selection && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) deleteSelected();
+  if(e.key==="Escape"){ setMode("idle"); $("#overlay").classList.remove("open"); $("#rackOverlay").classList.remove("open"); closeMenus(); }
+});
+function segmentOf(d){
+  const cx=d.x+NODE_W/2, cy=d.y+NODE_H/2; let best=null;
+  for(const s of SG()) if(cx>=s.x&&cx<=s.x+s.w&&cy>=s.y&&cy<=s.y+s.h) if(!best||s.w*s.h<best.w*best.h) best=s;
+  return best;
+}
+function parentSegment(s){
+  let best=null;
+  for(const o of SG()){ if(o===s) continue;
+    if(s.x>=o.x&&s.y>=o.y&&s.x+s.w<=o.x+o.w&&s.y+s.h<=o.y+o.h) if(!best||o.w*o.h<best.w*best.h) best=o; }
+  return best;
+}
+
+/* ================= IP-утилиты ================= */
+function ip2int(ip){ const m=ip.trim().match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/); if(!m) return null;
+  const o=m.slice(1).map(Number); if(o.some(v=>v>255)) return null; return ((o[0]<<24)>>>0)+(o[1]<<16)+(o[2]<<8)+o[3]; }
+function parseCidr(c){ const m=(c||"").trim().match(/^(.+)\/(\d{1,2})$/); if(!m) return null;
+  const base=ip2int(m[1]),bits=+m[2]; if(base===null||bits>32) return null;
+  const mask=bits===0?0:(~0<<(32-bits))>>>0; return {net:(base&mask)>>>0,mask,bits}; }
+const ipInCidr=(ip,c)=>{const i=ip2int(ip),p=parseCidr(c);return i!==null&&p&&((i&p.mask)>>>0)===p.net;};
+const cidrInCidr=(a,b)=>{const pa=parseCidr(a),pb=parseCidr(b);return pa&&pb&&pa.bits>=pb.bits&&((pa.net&pb.mask)>>>0)===pb.net;};
+
+/* ================= валидация ================= */
+let issues=[];
+function validate(){
+  issues=[]; const push=(sev,title,detail,focus)=>issues.push({sev,title,detail,focus});
+  const byIp={};
+  for(const d of D()) if(d.ip){ (byIp[d.ip]=byIp[d.ip]||[]).push(d); }
+  for(const [ip,arr] of Object.entries(byIp)) if(arr.length>1) push("error","Конфликт IP-адресов",`${ip}: ${arr.map(d=>d.name).join(", ")}`,{kind:"device",id:arr[0].id});
+  for(const d of D()){
+    const seg=segmentOf(d);
+    if(d.ip&&seg&&seg.cidr&&!ipInCidr(d.ip,seg.cidr)) push("warn","IP вне подсети сети",`${d.name}: ${d.ip} не входит в ${seg.cidr} («${seg.name}»)`,{kind:"device",id:d.id});
+    if(!LK().some(l=>l.from===d.id||l.to===d.id)) push("warn","Устройство не подключено",`${d.name} без связей`,{kind:"device",id:d.id});
+  }
+  const dhcpBySeg={};
+  for(const d of D()) if(d.dhcp){ const key=(segmentOf(d)||{id:"~none"}).id; (dhcpBySeg[key]=dhcpBySeg[key]||[]).push(d); }
+  for(const arr of Object.values(dhcpBySeg)) if(arr.length>1) push("error","Два DHCP-сервера в одном сегменте",arr.map(d=>d.name).join(", "),{kind:"device",id:arr[1].id});
+  const endTypes=["arm","laptop","phone","printer","nas","camera","crm","db","mail","web"];
+  for(const l of LK()){
+    const a=D().find(d=>d.id===l.from), b=D().find(d=>d.id===l.to); if(!a||!b) continue;
+    if(a.type==="arm"&&b.type==="arm") push("warn","АРМ соединён напрямую с АРМ",`${a.name} ↔ ${b.name}: обычно через коммутатор`,{kind:"link",id:l.id});
+    if((a.type==="internet"&&endTypes.includes(b.type))||(b.type==="internet"&&endTypes.includes(a.type))) push("error","Устройство напрямую в интернете",`${a.name} ↔ ${b.name}: нужен маршрутизатор/МЭ`,{kind:"link",id:l.id});
+    if(l.ltype==="vpn"){ const ok=t=>["router","firewall","vpn","internet","server"].includes(t);
+      if(!ok(a.type)||!ok(b.type)) push("warn","VPN-туннель на неподходящем устройстве",`${a.name} ↔ ${b.name}`,{kind:"link",id:l.id}); }
+  }
+  for(const s of SG()){
+    const p=parentSegment(s);
+    if(p&&s.cidr&&p.cidr&&!cidrInCidr(s.cidr,p.cidr)) push("error","Подсеть не вложена в родительскую",`«${s.name}» ${s.cidr} ∉ ${p.cidr}`,{kind:"segment",id:s.id});
+    if(s.cidr&&!parseCidr(s.cidr)) push("warn","Некорректный CIDR",`«${s.name}»: «${s.cidr}»`,{kind:"segment",id:s.id});
+  }
+  if(hasCycle()) push("warn","Возможная петля L2","Кольцо связей — проверьте STP/агрегацию",null);
+  renderIssues();
+}
+function hasCycle(){
+  const adj={}; D().forEach(d=>adj[d.id]=[]);
+  LK().forEach(l=>{ if(adj[l.from]&&adj[l.to]){adj[l.from].push(l.to);adj[l.to].push(l.from);} });
+  const seen=new Set();
+  for(const d of D()){ if(seen.has(d.id)) continue; const stack=[[d.id,null]]; const local=new Set();
+    while(stack.length){ const [v,parent]=stack.pop(); if(local.has(v)) return true; local.add(v); seen.add(v);
+      for(const w of adj[v]) if(w!==parent) stack.push([w,v]); } }
+  return false;
+}
+
+/* ================= рендер SVG ================= */
+function renderAll(){ renderSegments(); renderLinks(); renderNodes(); }
+function renderSegments(){
+  gSeg.innerHTML="";
+  const sorted=[...SG()].sort((a,b)=>b.w*b.h-a.w*a.h);
+  for(const s of sorted){
+    const restricted=s.accessLevel&&s.accessLevel!=="all";
+    const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.setAttribute("class","seg"+(restricted?" restricted":"")+(selection&&selection.kind==="segment"&&selection.id===s.id?" selected":""));
+    const lock=restricted?` 🔒`:"";
+    g.innerHTML=`
+      <rect x="${s.x}" y="${s.y}" width="${s.w}" height="${s.h}" rx="16" fill="${s.color}" stroke="${s.color}"/>
+      <text x="${s.x+14}" y="${s.y+24}" fill="${s.color}">${esc(s.name)}${lock} <tspan class="cidr">${esc(s.cidr||"")}${s.vlan?" · VLAN "+esc(s.vlan):""}</tspan></text>
+      <rect class="grip" x="${s.x+s.w-16}" y="${s.y+s.h-16}" width="16" height="16"/>`;
+    const rect=g.children[0], label=g.children[1], grip=g.children[2];
+    const startDrag=e=>{ if(mode!=="idle")return; select("segment",s.id); e.stopPropagation();
+      const inside=D().filter(d=>segmentOf(d)===s);
+      dragStart(e,null,(dx,dy)=>{s.x+=dx;s.y+=dy;inside.forEach(d=>{d.x+=dx;d.y+=dy;});renderAll();},()=>{validate();save();}); };
+    label.addEventListener("pointerdown",startDrag); rect.addEventListener("pointerdown",startDrag);
+    grip.addEventListener("pointerdown",e=>{ e.stopPropagation(); select("segment",s.id);
+      dragStart(e,null,(dx,dy)=>{s.w=Math.max(120,s.w+dx);s.h=Math.max(90,s.h+dy);renderAll();},()=>{validate();save();}); });
+    gSeg.appendChild(g);
+  }
+}
+function linkPath(a,b){ const x1=a.x+NODE_W/2,y1=a.y+NODE_H/2,x2=b.x+NODE_W/2,y2=b.y+NODE_H/2,mx=(x1+x2)/2;
+  return `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`; }
+function renderLinks(){
+  gLnk.innerHTML="";
+  for(const l of LK()){
+    const a=D().find(d=>d.id===l.from), b=D().find(d=>d.id===l.to); if(!a||!b) continue;
+    const dead=showMonitor&&((statusMap[a.id]&&statusMap[a.id].online===false)||(statusMap[b.id]&&statusMap[b.id].online===false));
+    const p=document.createElementNS("http://www.w3.org/2000/svg","path");
+    p.setAttribute("d",linkPath(a,b));
+    p.setAttribute("class","link t-"+(l.ltype||"copper")+(dead?" dead":"")+(selection&&selection.kind==="link"&&selection.id===l.id?" selected":""));
+    p.addEventListener("pointerdown",e=>{e.stopPropagation(); select("link",l.id);});
+    gLnk.appendChild(p);
+  }
+}
+function renderNodes(){
+  gNod.innerHTML="";
+  for(const d of D()){
+    const st=statusMap[d.id];
+    const off=showMonitor&&d.monitored&&st&&st.online===false;
+    const c=typeColor(d.type);
+    const g=document.createElementNS("http://www.w3.org/2000/svg","g");
+    g.setAttribute("class","node"+(off?" offline":"")+(selection&&selection.kind==="device"&&selection.id===d.id?" selected":""));
+    g.setAttribute("transform",`translate(${d.x},${d.y})`);
+    const stColor=!showMonitor||!d.monitored||!d.ip?"#555e78":(st?(st.online?"#22c55e":"#ef4444"):"#8b93ab");
+    const iy=(NODE_H-ICON_BOX)/2; const locked=d.accessLevel&&d.accessLevel!=="all";
+    g.innerHTML=`
+      <rect class="card" width="${NODE_W}" height="${NODE_H}" rx="12"/>
+      <rect x="10" y="${iy}" width="${ICON_BOX}" height="${ICON_BOX}" rx="10" fill="${c}" fill-opacity="0.13" stroke="${c}" stroke-opacity="0.45" stroke-width="1"/>
+      <g class="devicon" transform="translate(${10+(ICON_BOX-22)/2},${iy+(ICON_BOX-22)/2})">${iconSvg(d.type,22,c)}</g>
+      <text class="nm" x="58" y="29">${esc(trunc(d.name,13))}${locked?" 🔒":""}</text>
+      <text class="ip" x="58" y="46">${esc(d.ip||"— нет IP —")}</text>
+      ${d.userIds.length?`<text class="ip" x="58" y="62">👤 ${d.userIds.length}${d.configs.length?"  📎 "+d.configs.length:""}</text>`
+        :(d.configs.length?`<text class="ip" x="58" y="62">📎 ${d.configs.length} конфиг.</text>`:"")}
+      <circle class="status" cx="${NODE_W-13}" cy="13" r="6" fill="${stColor}"/>`;
+    g.addEventListener("pointerdown",e=>{ e.stopPropagation();
+      if(mode==="connect"){ if(!connectFrom){ connectFrom=d.id; toast("ok","Выбран источник",d.name); }
+        else { addLink(connectFrom,d.id); connectFrom=null; setMode("idle"); } return; }
+      select("device",d.id);
+      dragStart(e,null,(dx,dy)=>{d.x+=dx;d.y+=dy;g.setAttribute("transform",`translate(${d.x},${d.y})`);renderLinks();},
+        ()=>{renderAll();validate();save();});
+    });
+    gNod.appendChild(g);
+  }
+}
+function dragStart(e,onStart,onMove,onEnd){ e.preventDefault(); let last=toWorld(e.clientX,e.clientY);
+  const move=ev=>{ const p=toWorld(ev.clientX,ev.clientY); onMove(p.x-last.x,p.y-last.y); last=p; };
+  const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up); onEnd&&onEnd(); };
+  window.addEventListener("pointermove",move); window.addEventListener("pointerup",up); }
+
+svg.addEventListener("pointerdown",e=>{
+  if(mode==="segdraw"){
+    const p0=toWorld(e.clientX,e.clientY); const draft=$("#segDraft"); let p1=p0; draft.setAttribute("visibility","visible");
+    const move=ev=>{ p1=toWorld(ev.clientX,ev.clientY);
+      draft.setAttribute("x",Math.min(p0.x,p1.x)); draft.setAttribute("y",Math.min(p0.y,p1.y));
+      draft.setAttribute("width",Math.abs(p1.x-p0.x)); draft.setAttribute("height",Math.abs(p1.y-p0.y)); };
+    const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
+      draft.setAttribute("visibility","hidden"); setMode("idle");
+      if(Math.abs(p1.x-p0.x)>60&&Math.abs(p1.y-p0.y)>50) addSegment(Math.min(p0.x,p1.x),Math.min(p0.y,p1.y),Math.abs(p1.x-p0.x),Math.abs(p1.y-p0.y)); };
+    window.addEventListener("pointermove",move); window.addEventListener("pointerup",up); return;
+  }
+  svg.classList.add("panning"); let lx=e.clientX, ly=e.clientY;
+  const move=ev=>{ view.x+=ev.clientX-lx; view.y+=ev.clientY-ly; lx=ev.clientX; ly=ev.clientY; applyView(); };
+  const up=()=>{ svg.classList.remove("panning"); window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up); };
+  window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
+  if(mode!=="connect"){ selection=null; renderAll(); renderSide(); }
+});
+svg.addEventListener("pointermove",e=>{ const t=$("#tempLink");
+  if(mode==="connect"&&connectFrom){ const a=D().find(d=>d.id===connectFrom); if(!a) return;
+    const p=toWorld(e.clientX,e.clientY); t.setAttribute("d",`M${a.x+NODE_W/2},${a.y+NODE_H/2} L${p.x},${p.y}`); t.setAttribute("visibility","visible"); }
+  else t.setAttribute("visibility","hidden"); });
+
+/* ================= режимы ================= */
+function setMode(m){ mode=m; connectFrom=null;
+  $("#btnConnect").classList.toggle("active",m==="connect");
+  $("#btnSegment").classList.toggle("active",m==="segdraw");
+  svg.classList.toggle("connecting",m!=="idle"); $("#tempLink").setAttribute("visibility","hidden"); }
+$("#btnConnect").onclick=()=>setMode(mode==="connect"?"idle":"connect");
+$("#btnSegment").onclick=()=>setMode(mode==="segdraw"?"idle":"segdraw");
+$("#btnMonitor").onclick=()=>{
+  showMonitor=!showMonitor;
+  $("#btnMonitor").textContent="📡 Мониторинг: "+(showMonitor?"вкл":"выкл");
+  $("#btnMonitor").classList.toggle("active",showMonitor);
+  renderAll(); if(selection&&selection.kind==="device") renderSide();
+};
+
+/* ================= панель свойств ================= */
+function select(kind,id){ selection={kind,id}; showTab("props"); renderAll(); renderSide(); }
+function showTab(t){ curTab=t; $("#tabProps").classList.toggle("on",t==="props"); $("#tabIssues").classList.toggle("on",t==="issues"); renderSide(); }
+$("#tabProps").onclick=()=>showTab("props"); $("#tabIssues").onclick=()=>showTab("issues");
+const opt=(map,cur)=>Object.entries(map).map(([k,v])=>`<option value="${k}" ${cur===k?"selected":""}>${esc(v)}</option>`).join("");
+
+function renderSide(){
+  const c=$("#sideContent");
+  if(curTab==="issues"){ renderIssues(); return; }
+  if(!selection){ c.innerHTML=`<div class="empty">Выберите устройство, связь или сеть,<br>либо перетащите устройство из палитры.<br><br>Организация: <b>${esc(org().name)}</b><br>${D().length} устройств · ${SG().length} сетей · ${US().length} польз.</div>`; return; }
+  const {kind,id}=selection;
+
+  if(kind==="device"){
+    const d=D().find(x=>x.id===id); if(!d){selection=null;return renderSide();}
+    const seg=segmentOf(d); const st=statusMap[d.id]; const col=typeColor(d.type);
+    const hist=histMap[d.id]||[];
+    const userRows=d.userIds.map(uid2=>{ const u=US().find(x=>x.id===uid2); if(!u) return "";
+      return `<div class="usr-row"><span>${esc(u.name)}</span><span class="tagi">${esc(u.position||u.role)}</span>
+        <span class="tagi ${u.internet?"net":"no"}">${u.internet?"🌐 интернет":"⛔ без интернета"}</span>
+        <button class="rm" data-u="${u.id}" title="Открепить">✕</button></div>`; }).join("");
+    const freeUsers=US().filter(u=>!d.userIds.includes(u.id));
+    c.innerHTML=`
+      <div class="devhead" style="--c:${col}"><span class="ic">${iconSvg(d.type,24,col)}</span>
+        <div><b>${esc(typeName(d.type))}</b><small>${esc(CATS[(TYPES[d.type]||{}).cat]?CATS[TYPES[d.type].cat].name:"")}</small></div></div>
+      <div class="fld"><label>Имя устройства</label><input type="text" id="f_name" value="${esc(d.name)}"></div>
+
+      <details class="sec" open><summary>Сеть</summary><div class="body">
+        <div class="fld two"><div><label>IP-адрес</label><input type="text" id="f_ip" value="${esc(d.ip)}" placeholder="192.168.1.10"></div>
+          <div><label>Маска /</label><input type="text" id="f_mask" value="${esc(d.mask)}" placeholder="24"></div></div>
+        <div class="fld two"><div><label>Шлюз</label><input type="text" id="f_gateway" value="${esc(d.gateway)}" placeholder="192.168.1.1"></div>
+          <div><label>VLAN</label><input type="text" id="f_vlan" value="${esc(d.vlan)}" placeholder="10"></div></div>
+        <div class="fld"><label>DNS</label><input type="text" id="f_dns" value="${esc(d.dns)}" placeholder="8.8.8.8, 1.1.1.1"></div>
+        <div class="fld"><label>MAC</label><input type="text" id="f_mac" value="${esc(d.mac)}" placeholder="AA:BB:CC:DD:EE:FF"></div>
+        <div class="fld"><label>Открытые порты / сервисы</label><input type="text" id="f_ports" value="${esc(d.ports)}" placeholder="80,443,22 (SSH)"></div>
+        <div class="fld"><label class="chk"><input type="checkbox" id="f_dhcp" ${d.dhcp?"checked":""}> Раздаёт DHCP</label></div>
+        <div class="fld"><label class="chk"><input type="checkbox" id="f_mon" ${d.monitored?"checked":""}> Мониторить (ping)</label></div>
+        <div class="fld"><label>Сеть / сегмент (по расположению)</label><input type="text" value="${esc(seg?seg.name+(seg.cidr?" · "+seg.cidr:""):"вне сетей")}" disabled></div>
+      </div></details>
+
+      <details class="sec"><summary>Инвентаризация</summary><div class="body">
+        <div class="fld two"><div><label>Производитель</label><input type="text" id="f_vendor" value="${esc(d.vendor)}" placeholder="MikroTik"></div>
+          <div><label>Модель</label><input type="text" id="f_model" value="${esc(d.model)}" placeholder="RB4011"></div></div>
+        <div class="fld"><label>Серийный номер</label><input type="text" id="f_serial" value="${esc(d.serial)}"></div>
+        <div class="fld"><label>Инвентарный номер</label><input type="text" id="f_inv" value="${esc(d.inv)}" placeholder="ОС-000123"></div>
+        <div class="fld"><label>Расположение (кабинет/стойка)</label><input type="text" id="f_location" value="${esc(d.location)}" placeholder="Каб. 204, стойка R1"></div>
+        <div class="fld"><label>ОС / прошивка</label><input type="text" id="f_os" value="${esc(d.os)}" placeholder="RouterOS 7.14 / Win 11"></div>
+        <div class="fld two"><div><label>Ответственный (МОЛ)</label><input type="text" id="f_resp" value="${esc(d.responsible)}"></div>
+          <div><label>Статус</label><select id="f_status">${opt(STATUSES,d.status)}</select></div></div>
+      </div></details>
+
+      <details class="sec"><summary>Пользователи и доступ</summary><div class="body">
+        <div class="fld"><label>Уровень доступа к устройству</label><select id="f_access">${opt(ACCESS,d.accessLevel)}</select></div>
+        <div class="fld"><label>Комментарий к доступу</label><input type="text" id="f_accessNote" value="${esc(d.accessNote)}" placeholder="Только гл. бухгалтер и админ"></div>
+        <label style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Прикреплённые пользователи (${d.userIds.length})</label>
+        <div style="margin:6px 0">${userRows||'<span style="color:var(--muted);font-size:12.5px">Никто не прикреплён</span>'}</div>
+        ${freeUsers.length?`<select id="f_addUser"><option value="">+ прикрепить пользователя…</option>
+          ${freeUsers.map(u=>`<option value="${u.id}">${esc(u.name)} — ${esc(u.position||u.role)}${u.internet?" · 🌐":" · ⛔"}</option>`).join("")}</select>`
+          :`<div style="font-size:12px;color:var(--muted)">Все пользователи уже прикреплены или справочник пуст. Кнопка «👥 Пользователи» вверху.</div>`}
+      </div></details>
+
+      <details class="sec"><summary>Конфигурации (${d.configs.length})</summary><div class="body">
+        <div id="cfgList">${d.configs.map((f,i)=>`<div class="cfg-item">📎 <a href="${API}/api/configs/${f.id}/download" target="_blank">${esc(f.name)}</a><span class="dt">${esc(f.date)}</span><button data-i="${i}" data-id="${f.id}" class="cfgdel">✕</button></div>`).join("")}</div>
+        <input type="file" id="f_cfg" style="font-size:12px;color:var(--muted)">
+      </div></details>
+
+      ${showMonitor&&d.monitored&&d.ip?`<details class="sec" open><summary>Мониторинг (реальный ping)</summary><div class="body">
+        <div class="mini-ping">${hist.slice(-30).map(h=>`<i class="${h<0?"dead":""}" style="height:${h<0?100:Math.min(100,h*3)}%"></i>`).join("")||'<span style="color:var(--muted);font-size:12px">Ожидание первого опроса…</span>'}</div>
+        <div class="statline"><span>${st?(st.online?"🟢 в сети":"🔴 не отвечает"):"⏳ опрос…"}</span><span>${st&&st.online&&st.rtt!=null?st.rtt+" мс":"—"}</span></div>
+      </div></details>`:""}
+
+      <button class="prn-btn" id="f_print">🖨 Печать сводки по устройству</button>
+      <button class="del-btn" id="f_del">Удалить устройство</button>`;
+
+    const bind=(sel,prop,ev="input")=>{const el=$(sel); if(el) el.addEventListener(ev,e=>{ d[prop]=e.target.type==="checkbox"?e.target.checked:e.target.value; renderAll(); validate(); save(); });};
+    ["name","ip","mask","gateway","dns","vlan","mac","ports","vendor","model","serial","inv","location","os","resp","accessNote"]
+      .forEach(k=>bind("#f_"+k, k==="resp"?"responsible":k));
+    bind("#f_dhcp","dhcp","change"); bind("#f_mon","monitored","change");
+    bind("#f_status","status","change"); bind("#f_access","accessLevel","change");
+    const au=$("#f_addUser"); if(au) au.addEventListener("change",e=>{ if(e.target.value){ d.userIds.push(e.target.value); renderAll(); renderSide(); save(); }});
+    c.querySelectorAll(".usr-row .rm").forEach(b=>b.onclick=()=>{ d.userIds=d.userIds.filter(x=>x!==b.dataset.u); renderAll(); renderSide(); save(); });
+    const fc=$("#f_cfg"); if(fc) fc.addEventListener("change",async e=>{
+      const f=e.target.files[0]; if(!f) return;
+      const fd=new FormData(); fd.append("file",f);
+      try{
+        const r=await fetch(`${API}/api/devices/${d.id}/configs`,{method:"POST",body:fd});
+        if(!r.ok) throw new Error(r.status);
+        const meta=await r.json();
+        d.configs.unshift(meta);
+        toast("ok","Конфиг сохранён на сервере",meta.name); renderAll(); renderSide(); save();
+      }catch(err){ toast("error","Ошибка загрузки конфига","Сервер недоступен или файл слишком большой"); }
+    });
+    c.querySelectorAll(".cfgdel").forEach(b=>b.onclick=async ()=>{
+      const cid=b.dataset.id;
+      try{ if(cid) await fetch(`${API}/api/configs/${cid}`,{method:"DELETE"}); }catch(e){}
+      d.configs.splice(+b.dataset.i,1); renderAll(); renderSide(); save();
+    });
+    $("#f_print").onclick=()=>printReport("device",d);
+    $("#f_del").onclick=deleteSelected;
+  }
+
+  if(kind==="segment"){
+    const s=SG().find(x=>x.id===id); if(!s){selection=null;return renderSide();}
+    const p=parentSegment(s); const inside=D().filter(d=>segmentOf(d)===s);
+    c.innerHTML=`
+      <div style="font-size:15px;margin-bottom:10px">▧ <b>Сеть / сегмент</b></div>
+      <div class="fld"><label>Название</label><input type="text" id="s_name" value="${esc(s.name)}"></div>
+      <div class="fld two"><div><label>Подсеть (CIDR)</label><input type="text" id="s_cidr" value="${esc(s.cidr)}" placeholder="192.168.1.0/24"></div>
+        <div><label>VLAN</label><input type="text" id="s_vlan" value="${esc(s.vlan)}" placeholder="10"></div></div>
+      <div class="fld"><label>Уровень доступа сегмента</label><select id="s_access">${opt(ACCESS,s.accessLevel||"all")}</select></div>
+      <div class="fld"><label>Комментарий к доступу</label><input type="text" id="s_accessNote" value="${esc(s.accessNote||"")}" placeholder="VLAN изолирован, доступ только админам"></div>
+      <div class="fld"><label>Цвет</label><input type="color" id="s_color" value="${s.color}" style="width:60px;height:32px;border:none;background:none;cursor:pointer"></div>
+      <div class="fld"><label>Родительская сеть</label><input type="text" value="${esc(p?p.name+(p.cidr?" · "+p.cidr:""):"— (верхний уровень)")}" disabled></div>
+      <div class="fld"><label>Устройств внутри: ${inside.length}</label><div style="font-size:12.5px;color:var(--muted)">${inside.map(d=>esc(d.name)).join("<br>")||"—"}</div></div>
+      <button class="del-btn" id="s_del">Удалить сеть (устройства останутся)</button>`;
+    const bind=(sel,prop,ev="input")=>$(sel).addEventListener(ev,e=>{ s[prop]=e.target.value; renderAll(); validate(); save(); });
+    bind("#s_name","name"); bind("#s_cidr","cidr"); bind("#s_vlan","vlan"); bind("#s_color","color"); bind("#s_accessNote","accessNote"); bind("#s_access","accessLevel","change");
+    $("#s_del").onclick=deleteSelected;
+  }
+
+  if(kind==="link"){
+    const l=LK().find(x=>x.id===id); if(!l){selection=null;return renderSide();}
+    const a=D().find(d=>d.id===l.from), b=D().find(d=>d.id===l.to);
+    c.innerHTML=`
+      <div style="font-size:15px;margin-bottom:10px">🔗 <b>Соединение</b></div>
+      <div class="fld"><label>Между</label><input type="text" value="${esc((a?a.name:"?")+" ↔ "+(b?b.name:"?"))}" disabled></div>
+      <div class="fld"><label>Тип канала</label><select id="l_type">${opt(LINK_TYPES,l.ltype||"copper")}</select></div>
+      <div class="fld"><label>Подпись (порт, скорость…)</label><input type="text" id="l_label" value="${esc(l.label)}" placeholder="Gi0/1 ↔ eth0, 10 Гбит"></div>
+      <button class="del-btn" id="l_del">Разорвать соединение</button>`;
+    $("#l_label").addEventListener("input",e=>{ l.label=e.target.value; save(); });
+    $("#l_type").addEventListener("change",e=>{ l.ltype=e.target.value; renderAll(); validate(); save(); });
+    $("#l_del").onclick=deleteSelected;
+  }
+}
+function renderIssues(){
+  const badge=$("#issueBadge"); const errs=issues.length;
+  badge.style.display=errs?"":"none"; badge.textContent=errs;
+  if(curTab!=="issues") return; const c=$("#sideContent");
+  if(!errs){ c.innerHTML=`<div class="ok">✔ Противоречий не найдено.<br>Сеть построена корректно.</div>`; return; }
+  c.innerHTML=issues.map((i,n)=>`<div class="issue ${i.sev}" data-n="${n}"><div class="t">${i.sev==="error"?"⛔":"⚠️"} ${esc(i.title)}</div><div class="d">${esc(i.detail)}</div></div>`).join("");
+  c.querySelectorAll(".issue").forEach(el=>el.onclick=()=>{ const i=issues[+el.dataset.n]; if(i.focus) select(i.focus.kind,i.focus.id); });
+}
+
+/* ================= пользователи (модалка) ================= */
+$("#btnUsers").onclick=openUsers;
+$("#usrClose").onclick=()=>$("#overlay").classList.remove("open");
+$("#overlay").addEventListener("pointerdown",e=>{ if(e.target.id==="overlay") $("#overlay").classList.remove("open"); });
+function openUsers(){ $("#overlay").classList.add("open"); renderUsers(); }
+function renderUsers(){
+  const b=$("#usrBody");
+  b.innerHTML=`
+    <p style="color:var(--muted);font-size:12.5px;margin-bottom:12px">Справочник сотрудников организации «${esc(org().name)}». Прикрепляются к устройствам во вкладке «Пользователи и доступ». Флаг 🌐 — доступ в интернет.</p>
+    <table class="u"><thead><tr><th style="width:30%">ФИО</th><th>Должность</th><th style="width:110px">Роль</th><th style="width:80px">Интернет</th><th style="width:34px"></th></tr></thead>
+    <tbody>${US().map(u=>`<tr data-u="${u.id}">
+      <td><input class="uf" data-k="name" value="${esc(u.name)}"></td>
+      <td><input class="uf" data-k="position" value="${esc(u.position||"")}"></td>
+      <td><select class="uf" data-k="role"><option value="user" ${u.role==="user"?"selected":""}>Сотрудник</option><option value="admin" ${u.role==="admin"?"selected":""}>Администратор</option><option value="guest" ${u.role==="guest"?"selected":""}>Гость</option></select></td>
+      <td style="text-align:center"><input type="checkbox" class="uf" data-k="internet" ${u.internet?"checked":""}></td>
+      <td><button class="rm" data-u="${u.id}">✕</button></td></tr>`).join("")}</tbody></table>
+    <button class="btn" id="usrAdd" style="margin-top:10px">＋ Добавить пользователя</button>`;
+  b.querySelectorAll(".uf").forEach(inp=>inp.addEventListener("input",e=>{
+    const tr=e.target.closest("tr"); const u=US().find(x=>x.id===tr.dataset.u); if(!u) return;
+    u[e.target.dataset.k]=e.target.type==="checkbox"?e.target.checked:e.target.value;
+    renderAll(); if(selection&&selection.kind==="device") renderSide(); save();
+  }));
+  b.querySelectorAll(".rm").forEach(btn=>btn.onclick=()=>{ const id=btn.dataset.u;
+    org().users=US().filter(u=>u.id!==id); D().forEach(d=>d.userIds=d.userIds.filter(x=>x!==id));
+    renderAll(); renderUsers(); if(selection) renderSide(); save(); });
+  $("#usrAdd").onclick=()=>{ US().push({id:uid(),name:"Новый сотрудник",position:"",role:"user",internet:true}); renderUsers(); save(); };
+}
+
+/* ================= серверные стойки ================= */
+const U_H=22;                         // высота 1U в пикселях
+const RACK_TYPES={server:"Сервер",switch:"Коммутатор",router:"Маршрутизатор",firewall:"Межсетевой экран",
+  ups:"ИБП",nas:"NAS / СХД",db:"Сервер СУБД",vm:"Гипервизор",patch:"Патч-панель",kvm:"KVM / консоль",shelf:"Полка / прочее"};
+const RACK_TYPE_MAP={patch:"switch",kvm:"arm",shelf:"custom"};  // иконки для типов без своих
+let curRack=null, curUnit=null;
+const RK=()=>{ org().racks=org().racks||[]; return org().racks; };
+
+function rackTypeColor(t){ return typeColor(RACK_TYPE_MAP[t]||t); }
+function rackIcon(t,size,color){ return iconSvg(RACK_TYPE_MAP[t]||t,size,color); }
+
+$("#btnRacks").onclick=()=>{ $("#rackOverlay").classList.add("open");
+  if(!RK().length) addRack(); else { curRack=curRack&&RK().find(r=>r.id===curRack.id)?curRack:RK()[0]; }
+  renderRackView(); };
+$("#rackClose").onclick=()=>$("#rackOverlay").classList.remove("open");
+$("#rackAdd").onclick=()=>{ addRack(); renderRackView(); };
+$("#unitAdd").onclick=()=>{ if(!curRack) return;
+  const u=addUnit(curRack); if(!u) return toast("warn","Нет свободного места",`В стойке «${curRack.name}» не осталось свободных ${2}U подряд`);
+  curUnit=u; renderRackView(); save(); };
+$("#rackPrint").onclick=()=>{ if(curRack) printReport("rack",curRack); };
+
+function addRack(){
+  const r={id:uid(),name:"Стойка "+(RK().length+1),height:42,location:"",units:[]};
+  RK().push(r); curRack=r; curUnit=null; save(); return r;
+}
+function addUnit(rack,size=2){
+  // ищем свободный слот сверху вниз
+  for(let pos=rack.height-size+1; pos>=1; pos--){
+    if(!collides(rack,pos,size,null)){
+      const u={id:uid(),name:"Новое устройство",type:"server",ip:"",inv:"",serial:"",notes:"",u:pos,size,linkId:""};
+      rack.units.push(u); return u;
+    }
+  }
+  return null;
+}
+function collides(rack,pos,size,skipId){
+  const a1=pos, a2=pos+size-1;
+  if(a1<1||a2>rack.height) return true;
+  return rack.units.some(o=>{ if(o.id===skipId) return false;
+    const b1=o.u, b2=o.u+o.size-1; return a1<=b2&&b1<=a2; });
+}
+function unitStatus(u){
+  if(u.linkId&&statusMap[u.linkId]) return statusMap[u.linkId];
+  if(u.ip){ const d=D().find(x=>x.ip===u.ip); if(d&&statusMap[d.id]) return statusMap[d.id]; }
+  return null;
+}
+
+function renderRackView(){ renderRackList(); renderRackStage(); renderRackSide(); }
+function renderRackList(){
+  const el=$("#rackList");
+  el.innerHTML=`<h3>Стойки — ${esc(org().name)}</h3>`+RK().map(r=>`
+    <div class="rack-tab ${curRack&&r.id===curRack.id?"on":""}" data-r="${r.id}">🗄 ${esc(r.name)}<small>${r.units.length} юн.</small></div>`).join("")
+    +(RK().length?"":`<div class="empty" style="margin-top:20px">Нажмите «＋ Стойка»</div>`);
+  el.querySelectorAll(".rack-tab").forEach(t=>t.onclick=()=>{ curRack=RK().find(r=>r.id===t.dataset.r); curUnit=null; renderRackView(); });
+}
+function renderRackStage(){
+  const st=$("#rackStage");
+  if(!curRack){ st.innerHTML=`<div class="rackempty">Создайте стойку кнопкой «＋ Стойка»</div>`; return; }
+  const r=curRack, H=r.height*U_H;
+  const rails=`<div class="rail" style="--uh:${U_H}px">${Array.from({length:r.height},(_,i)=>`<span>${i+1}</span>`).join("")}</div>`;
+  st.innerHTML=`
+    <div class="rackbox" style="--uh:${U_H}px">
+      <div class="rname">${esc(r.name)}${r.location?` · <span style="color:var(--muted);font-weight:400">${esc(r.location)}</span>`:""} <span style="color:var(--muted);font-weight:400">(${r.height}U)</span></div>
+      <div class="rackframe" style="height:${H}px">
+        ${rails}
+        <div class="uwell" id="uwell" style="height:${H}px"></div>
+        ${rails}
+      </div>
+    </div>`;
+  const well=$("#uwell");
+  for(const u of r.units){
+    const c=rackTypeColor(u.type);
+    const stt=unitStatus(u);
+    const dead=showMonitor&&stt&&stt.online===false;
+    const el=document.createElement("div");
+    el.className="runit"+(curUnit&&u.id===curUnit.id?" sel":"")+(dead?" dead":"");
+    el.style.setProperty("--c",c);
+    el.style.height=(u.size*U_H-4)+"px";
+    el.style.bottom=((u.u-1)*U_H+2)+"px";
+    const led=stt?(stt.online?"#22c55e":"#ef4444"):"#555e78";
+    el.innerHTML=`<span class="led" style="background:${led}"></span>
+      <span class="ric">${rackIcon(u.type,Math.min(20,u.size*U_H-8),c)}</span>
+      <span class="rtx"><b>${esc(u.name)}</b>${u.size>1?`<i>${esc(u.ip||RACK_TYPES[u.type]||"")}</i>`:""}</span>
+      <span class="rsz">${u.size}U</span>`;
+    el.addEventListener("pointerdown",e=>{
+      e.preventDefault(); curUnit=u; renderRackList(); renderRackSide();
+      document.querySelectorAll(".runit").forEach(x=>x.classList.remove("sel")); el.classList.add("sel");
+      const startY=e.clientY, startU=u.u; let moved=false;
+      const move=ev=>{
+        const du=Math.round((startY-ev.clientY)/U_H);
+        const nu=Math.min(r.height-u.size+1, Math.max(1, startU+du));
+        if(nu!==u.u&&!collides(r,nu,u.size,u.id)){ u.u=nu; moved=true;
+          el.style.bottom=((u.u-1)*U_H+2)+"px"; }
+      };
+      const up=()=>{ window.removeEventListener("pointermove",move); window.removeEventListener("pointerup",up);
+        if(moved){ save(); renderRackSide(); } };
+      window.addEventListener("pointermove",move); window.addEventListener("pointerup",up);
+    });
+    well.appendChild(el);
+  }
+}
+function renderRackSide(){
+  const el=$("#rackSide");
+  if(!curRack){ el.innerHTML=""; return; }
+  const r=curRack;
+  const used=r.units.reduce((s,u)=>s+u.size,0);
+  let html=`
+    <div class="fld"><label>Название стойки</label><input type="text" id="rk_name" value="${esc(r.name)}"></div>
+    <div class="fld two"><div><label>Высота, U</label><input type="text" id="rk_h" value="${r.height}"></div>
+      <div><label>Занято</label><input type="text" value="${used} / ${r.height}U" disabled></div></div>
+    <div class="fld"><label>Расположение</label><input type="text" id="rk_loc" value="${esc(r.location||"")}" placeholder="Серверная, каб. 105"></div>
+    <button class="del-btn" id="rk_del" style="margin-bottom:14px">Удалить стойку</button>
+    <hr style="border:none;border-top:1px solid var(--border);margin-bottom:12px">`;
+  if(curUnit){
+    const u=curUnit;
+    const stt=unitStatus(u);
+    const devOpts=D().filter(d=>d.ip).map(d=>`<option value="${d.id}" ${u.linkId===d.id?"selected":""}>${esc(d.name)} (${esc(d.ip)})</option>`).join("");
+    html+=`
+    <div class="devhead" style="--c:${rackTypeColor(u.type)}"><span class="ic">${rackIcon(u.type,24,rackTypeColor(u.type))}</span>
+      <div><b>Юнит: ${esc(u.name)}</b><small>Позиция ${u.u}U–${u.u+u.size-1}U ${stt?(stt.online?"· 🟢 в сети"+(stt.rtt!=null?" "+stt.rtt+" мс":""):"· 🔴 не отвечает"):""}</small></div></div>
+    <div class="fld"><label>Имя</label><input type="text" id="un_name" value="${esc(u.name)}"></div>
+    <div class="fld two"><div><label>Тип</label><select id="un_type">${opt(RACK_TYPES,u.type)}</select></div>
+      <div><label>Размер, U</label><select id="un_size">${[1,2,3,4,5,6,8,10,12].map(s=>`<option ${u.size===s?"selected":""}>${s}</option>`).join("")}</select></div></div>
+    <div class="fld"><label>IP-адрес</label><input type="text" id="un_ip" value="${esc(u.ip)}" placeholder="192.168.10.5"></div>
+    <div class="fld two"><div><label>Инв. №</label><input type="text" id="un_inv" value="${esc(u.inv||"")}"></div>
+      <div><label>Серийный №</label><input type="text" id="un_serial" value="${esc(u.serial||"")}"></div></div>
+    <div class="fld"><label>Связать с устройством карты (статус ping)</label>
+      <select id="un_link"><option value="">— не связано —</option>${devOpts}</select></div>
+    <div class="fld"><label>Заметки</label><textarea id="un_notes" rows="2">${esc(u.notes||"")}</textarea></div>
+    <button class="del-btn" id="un_del">Извлечь юнит из стойки</button>`;
+  } else {
+    html+=`<div class="empty" style="margin-top:16px">Кликните по юниту в стойке<br>или добавьте новый («＋ Юнит»).<br><br>Юниты перетаскиваются мышью<br>вверх/вниз по слотам.</div>`;
+  }
+  el.innerHTML=html;
+  $("#rk_name").addEventListener("input",e=>{ r.name=e.target.value; renderRackList(); renderRackStage(); save(); });
+  $("#rk_loc").addEventListener("input",e=>{ r.location=e.target.value; renderRackStage(); save(); });
+  $("#rk_h").addEventListener("change",e=>{
+    const h=Math.min(60,Math.max(4,parseInt(e.target.value)||42));
+    const maxUsed=r.units.reduce((m,u)=>Math.max(m,u.u+u.size-1),0);
+    if(h<maxUsed) return toast("warn","Нельзя уменьшить",`Юниты занимают до ${maxUsed}U — сначала передвиньте их ниже`);
+    r.height=h; renderRackView(); save();
+  });
+  $("#rk_del").onclick=()=>{
+    if(!confirm(`Удалить стойку «${r.name}» со всеми юнитами?`)) return;
+    org().racks=RK().filter(x=>x.id!==r.id); curRack=RK()[0]||null; curUnit=null; renderRackView(); save();
+  };
+  if(curUnit){
+    const u=curUnit;
+    const bindU=(sel,prop,ev="input")=>{const n=$(sel); if(n) n.addEventListener(ev,e=>{ u[prop]=e.target.value; renderRackStage(); renderRackList(); save(); });};
+    bindU("#un_name","name"); bindU("#un_ip","ip"); bindU("#un_inv","inv"); bindU("#un_serial","serial"); bindU("#un_notes","notes");
+    bindU("#un_type","type","change"); bindU("#un_link","linkId","change");
+    $("#un_link").addEventListener("change",e=>{
+      const d=D().find(x=>x.id===e.target.value);
+      if(d){ if(!u.ip) u.ip=d.ip; if(u.name==="Новое устройство") u.name=d.name; renderRackSide(); renderRackStage(); save(); }
+    });
+    $("#un_size").addEventListener("change",e=>{
+      const ns=parseInt(e.target.value);
+      if(collides(r,u.u,ns,u.id)){ e.target.value=u.size; return toast("warn","Не помещается","Ниже/выше есть другие юниты — сначала освободите место"); }
+      u.size=ns; renderRackStage(); renderRackSide(); save();
+    });
+    $("#un_del").onclick=()=>{ r.units=r.units.filter(x=>x.id!==u.id); curUnit=null; renderRackView(); save(); };
+  }
+}
+/* обновление статусов юнитов при открытой стойке */
+setInterval(()=>{ if($("#rackOverlay").classList.contains("open")&&curRack) renderRackStage(); },5000);
+
+/* ================= печать A4 ================= */
+function contentBounds(){
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  for(const d of D()){ minx=Math.min(minx,d.x); miny=Math.min(miny,d.y); maxx=Math.max(maxx,d.x+NODE_W); maxy=Math.max(maxy,d.y+NODE_H); }
+  for(const s of SG()){ minx=Math.min(minx,s.x); miny=Math.min(miny,s.y); maxx=Math.max(maxx,s.x+s.w); maxy=Math.max(maxy,s.y+s.h); }
+  if(minx>maxx){ minx=0;miny=0;maxx=400;maxy=300; }
+  const pad=30; return {minx:minx-pad,miny:miny-pad,w:(maxx-minx)+pad*2,h:(maxy-miny)+pad*2};
+}
+function mapSvgForPrint(){
+  const b=contentBounds();
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${b.minx} ${b.miny} ${b.w} ${b.h}" width="100%" style="max-height:150mm">
+    <rect x="${b.minx}" y="${b.miny}" width="${b.w}" height="${b.h}" fill="#fff"/>
+    ${gSeg.innerHTML}${gLnk.innerHTML}${gNod.innerHTML}</svg>`;
+}
+const userById=id=>US().find(u=>u.id===id);
+function printReport(kind,dev){
+  const root=$("#printRoot"); const o=org();
+  const head=`<h1>${esc(o.name)}</h1><div class="sub">Отчёт сформирован ${new Date().toLocaleString("ru")} · NetworkMap</div>`;
+  let html="";
+  if(kind==="schema"){
+    html=head+`<div class="diagram">${mapSvgForPrint()}</div>
+      <h2>Сети и сегменты</h2><table><thead><tr><th>Сеть / сегмент</th><th>Подсеть (CIDR)</th><th>VLAN</th><th>Доступ</th><th>Устройств</th></tr></thead><tbody>
+      ${SG().map(s=>`<tr><td>${esc(s.name)}</td><td>${esc(s.cidr||"—")}</td><td>${esc(s.vlan||"—")}</td><td>${esc(ACCESS[s.accessLevel||"all"])}</td><td>${D().filter(d=>segmentOf(d)===s).length}</td></tr>`).join("")}</tbody></table>`;
+  } else if(kind==="inv"){
+    html=head+`<h2>Инвентаризация устройств (${D().length})</h2>
+      <table><thead><tr><th>№</th><th>Имя</th><th>Тип</th><th>Сеть</th><th>IP / маска</th><th>MAC</th><th>Производитель / модель</th><th>Серийный №</th><th>Инв. №</th><th>Ответственный</th><th>Статус</th></tr></thead><tbody>
+      ${D().map((d,i)=>{const s=segmentOf(d);return `<tr><td>${i+1}</td><td>${esc(d.name)}</td><td>${esc(typeName(d.type))}</td><td>${esc(s?s.name:"—")}</td>
+        <td>${esc(d.ip||"—")}${d.ip?" /"+esc(d.mask):""}</td><td>${esc(d.mac||"—")}</td><td>${esc([d.vendor,d.model].filter(Boolean).join(" ")||"—")}</td>
+        <td>${esc(d.serial||"—")}</td><td>${esc(d.inv||"—")}</td><td>${esc(d.responsible||"—")}</td><td>${esc(STATUSES[d.status]||"—")}</td></tr>`;}).join("")}</tbody></table>
+      <div class="foot">Всего устройств: ${D().length}. Организация «${esc(o.name)}».</div>`;
+  } else if(kind==="access"){
+    html=head+`<h2>Матрица доступов и пользователей</h2>
+      <table><thead><tr><th>Устройство</th><th>Сеть</th><th>Уровень доступа</th><th>Пользователи (роль · интернет)</th><th>Примечание</th></tr></thead><tbody>
+      ${D().map(d=>{const s=segmentOf(d);const us=d.userIds.map(userById).filter(Boolean);
+        return `<tr><td>${esc(d.name)}</td><td>${esc(s?s.name:"—")}</td><td>${esc(ACCESS[d.accessLevel||"all"])}</td>
+        <td>${us.length?us.map(u=>`${esc(u.name)} <span class="pill">${esc(u.position||u.role)}${u.internet?" · 🌐":" · ⛔"}</span>`).join("<br>"):"—"}</td>
+        <td>${esc(d.accessNote||"")}</td></tr>`;}).join("")}</tbody></table>
+      <h2>Справочник пользователей (${US().length})</h2>
+      <table><thead><tr><th>ФИО</th><th>Должность</th><th>Роль</th><th>Доступ в интернет</th><th>Прикреплён к устройствам</th></tr></thead><tbody>
+      ${US().map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.position||"—")}</td><td>${esc(u.role)}</td><td>${u.internet?"Да 🌐":"Нет ⛔"}</td>
+        <td>${esc(D().filter(d=>d.userIds.includes(u.id)).map(d=>d.name).join(", ")||"—")}</td></tr>`).join("")}</tbody></table>`;
+  } else if(kind==="device"){
+    const d=dev; const s=segmentOf(d); const us=d.userIds.map(userById).filter(Boolean);
+    html=head+`<h2>Карточка устройства: ${esc(d.name)}</h2>
+      <div class="kv">
+        <b>Тип</b><span>${esc(typeName(d.type))}</span>
+        <b>Сеть / сегмент</b><span>${esc(s?s.name+(s.cidr?" ("+s.cidr+")":""):"вне сетей")}</span>
+        <b>IP-адрес</b><span>${esc(d.ip||"—")} / ${esc(d.mask)}</span>
+        <b>Шлюз · DNS</b><span>${esc(d.gateway||"—")} · ${esc(d.dns||"—")}</span>
+        <b>MAC · VLAN</b><span>${esc(d.mac||"—")} · ${esc(d.vlan||"—")}</span>
+        <b>Порты / сервисы</b><span>${esc(d.ports||"—")}</span>
+        <b>Производитель · модель</b><span>${esc(d.vendor||"—")} ${esc(d.model||"")}</span>
+        <b>Серийный № · Инв. №</b><span>${esc(d.serial||"—")} · ${esc(d.inv||"—")}</span>
+        <b>Расположение</b><span>${esc(d.location||"—")}</span>
+        <b>ОС / прошивка</b><span>${esc(d.os||"—")}</span>
+        <b>Ответственный (МОЛ)</b><span>${esc(d.responsible||"—")}</span>
+        <b>Статус</b><span>${esc(STATUSES[d.status]||"—")}</span>
+        <b>Уровень доступа</b><span>${esc(ACCESS[d.accessLevel||"all"])}${d.accessNote?" — "+esc(d.accessNote):""}</span>
+        <b>Заметки</b><span>${esc(d.notes||"—")}</span>
+      </div>
+      <h2>Пользователи с доступом (${us.length})</h2>
+      <table><thead><tr><th>ФИО</th><th>Должность</th><th>Роль</th><th>Интернет</th></tr></thead><tbody>
+      ${us.length?us.map(u=>`<tr><td>${esc(u.name)}</td><td>${esc(u.position||"—")}</td><td>${esc(u.role)}</td><td>${u.internet?"Да 🌐":"Нет ⛔"}</td></tr>`).join(""):`<tr><td colspan="4">Пользователи не прикреплены</td></tr>`}</tbody></table>
+      ${d.configs.length?`<h2>Конфигурации на сервере</h2><table><thead><tr><th>Файл</th><th>Дата</th></tr></thead><tbody>${d.configs.map(f=>`<tr><td>${esc(f.name)}</td><td>${esc(f.date)}</td></tr>`).join("")}</tbody></table>`:""}`;
+  } else if(kind==="rack"){
+    const r=dev;
+    const puh=Math.max(9,Math.min(16,Math.floor(560/r.height))); // высота 1U в печати, чтобы стойка влезла на страницу
+    const rails=`<div class="rail" style="--uh:${puh}px">${Array.from({length:r.height},(_,i)=>`<span>${i+1}</span>`).join("")}</div>`;
+    const units=[...r.units].sort((a,b)=>(b.u+b.size)-(a.u+a.size));
+    html=head+`<h2>Схема стойки: ${esc(r.name)}${r.location?" — "+esc(r.location):""} (${r.height}U)</h2>
+      <div class="prack" style="--uh:${puh}px; height:${r.height*puh+4}px">
+        ${rails}
+        <div class="uwell" style="height:${r.height*puh}px">
+          ${r.units.map(u=>`<div class="runit" style="height:${u.size*puh-3}px; bottom:${(u.u-1)*puh+1.5}px">
+            <b>${esc(u.name)}</b>${u.size*puh>=22&&u.ip?`<i>${esc(u.ip)}</i>`:""}<span class="rsz">${u.size}U</span></div>`).join("")}
+        </div>
+        ${rails}
+      </div>
+      <h2>Состав стойки (${r.units.length} юнитов, занято ${r.units.reduce((s,u)=>s+u.size,0)} из ${r.height}U)</h2>
+      <table><thead><tr><th>Позиция</th><th>Размер</th><th>Имя</th><th>Тип</th><th>IP</th><th>Инв. №</th><th>Серийный №</th><th>Заметки</th></tr></thead><tbody>
+      ${units.map(u=>`<tr><td>${u.u}U${u.size>1?"–"+(u.u+u.size-1)+"U":""}</td><td>${u.size}U</td><td>${esc(u.name)}</td><td>${esc(RACK_TYPES[u.type]||u.type)}</td>
+        <td>${esc(u.ip||"—")}</td><td>${esc(u.inv||"—")}</td><td>${esc(u.serial||"—")}</td><td>${esc(u.notes||"")}</td></tr>`).join("")}</tbody></table>
+      <div class="foot">Нумерация юнитов — снизу вверх. Организация «${esc(o.name)}».</div>`;
+  }
+  root.innerHTML=html;
+  window.print();
+}
+function closeMenus(){ document.querySelectorAll(".menu.open").forEach(m=>m.classList.remove("open")); }
+$("#btnPrint").onclick=e=>{ e.stopPropagation(); $("#printMenu").classList.toggle("open"); };
+document.addEventListener("pointerdown",e=>{ if(!e.target.closest("#printMenu")) closeMenus(); });
+$("#printMenu").querySelectorAll(".drop button").forEach(b=>b.onclick=()=>{ closeMenus();
+  const p=b.dataset.p;
+  if(p==="export") return doExport();
+  if(p==="import") return $("#fileImport").click();
+  printReport(p);
+});
+
+/* ================= экспорт / импорт ================= */
+function doExport(){ const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:"application/json"}));
+  a.download="network-map.json"; a.click(); }
+$("#fileImport").addEventListener("change",e=>{ const f=e.target.files[0]; if(!f) return; const rd=new FileReader();
+  rd.onload=()=>{ try{ state=JSON.parse(rd.result); state.customTypes=state.customTypes||{}; TYPES={...BUILTIN_TYPES,...state.customTypes};
+      if(!state.curOrg&&state.orgs.length) state.curOrg=state.orgs[0].id;
+      selection=null; renderOrgs(); renderPalette(); renderAll(); validate(); save(); toast("ok","Карта импортирована",f.name);
+    }catch(err){ toast("error","Ошибка импорта","Некорректный JSON"); } }; rd.readAsText(f); });
+
+/* ================= тосты / утилиты ================= */
+function toast(kind,title,detail){
+  const t=document.createElement("div"); t.className="toast "+kind;
+  t.innerHTML=`<div class="tt">${esc(title)}</div><div class="td">${esc(detail)}</div>`;
+  $("#toasts").appendChild(t);
+  setTimeout(()=>{t.style.opacity="0"; t.style.transition=".4s"; setTimeout(()=>t.remove(),400);},4200);
+}
+const esc=s=>String(s??"").replace(/[&<>"]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[m]));
+const trunc=(s,n)=>s.length>n?s.slice(0,n-1)+"…":s;
+
+/* ================= стартовые данные ================= */
+function seed(){
+  state={orgs:[],curOrg:null,customTypes:{},seq:1};
+  const o1={id:uid(),name:"Моя организация",devices:[],links:[],segments:[],users:[]};
+  state.orgs.push(o1); state.curOrg=o1.id;
+  o1.segments.push({id:uid(),name:"Локальная сеть",cidr:"192.168.1.0/24",vlan:"",color:"#6c8cff",x:320,y:220,w:620,h:400,accessLevel:"all",accessNote:""});
+  const mk=(t,n,ip,x,y,ex={})=>{const d=newDevice(t,x,y);Object.assign(d,{name:n,ip},ex);o1.devices.push(d);return d;};
+  const inet=mk("internet","Интернет","",560,50,{monitored:false});
+  const rt=mk("router","Роутер","192.168.1.1",560,150,{dhcp:true});
+  const sw=mk("switch","Коммутатор","192.168.1.2",560,300);
+  const pc=mk("arm","АРМ-1","192.168.1.10",400,440);
+  const srv=mk("server","Сервер","192.168.1.5",720,440);
+  const L=(a,b,t)=>o1.links.push({id:uid(),from:a.id,to:b.id,label:"",ltype:t||"copper"});
+  L(inet,rt);L(rt,sw);L(sw,pc);L(sw,srv);
+}
+
+/* ================= init ================= */
+(async function init(){
+  try{
+    const r=await fetch(API+"/api/state");
+    const data=await r.json();
+    if(data&&data.orgs&&data.orgs.length){ state=data; }
+    else { seed(); save(); }
+  }catch(e){
+    seed();
+    toast("error","Сервер недоступен","Работа в автономном режиме — изменения не сохранятся");
+  }
+  state.customTypes=state.customTypes||{};
+  TYPES={...BUILTIN_TYPES,...state.customTypes};
+  if(!state.curOrg||!state.orgs.find(o=>o.id===state.curOrg)) state.curOrg=state.orgs[0].id;
+  renderOrgs(); renderChips(); renderPalette();
+  applyView(); renderAll(); renderSide(); validate();
+  connectWS();
+})();
+</script>
+</body>
+</html>
