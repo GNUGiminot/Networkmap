@@ -6,6 +6,10 @@
 доступа, валидация правил построения сетей, **реальный ping-мониторинг**
 с живыми статусами и печать отчётов на A4.
 
+<img width="1906" height="900" alt="image" src="https://github.com/user-attachments/assets/394e225d-d63d-4a24-876e-e95eb52c0187" />
+
+<img width="1904" height="630" alt="image" src="https://github.com/user-attachments/assets/cde48c62-584b-4c91-9974-2b7f1e5e7558" />
+
 ## Возможности
 
 - 🗺 Полотно: drag-and-drop устройств, связи (медь/оптика/Wi-Fi/VPN),
