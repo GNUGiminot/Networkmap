@@ -8,6 +8,8 @@
 
 <img width="1906" height="900" alt="image" src="https://github.com/user-attachments/assets/394e225d-d63d-4a24-876e-e95eb52c0187" />
 
+<img width="1910" height="905" alt="image" src="https://github.com/user-attachments/assets/3f2a8a73-d26b-401b-bc60-bd19354ba5bf" />
+
 <img width="1904" height="630" alt="image" src="https://github.com/user-attachments/assets/cde48c62-584b-4c91-9974-2b7f1e5e7558" />
 
 ## Возможности
